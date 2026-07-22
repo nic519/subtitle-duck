@@ -135,6 +135,7 @@ export type SubtitleMuxPageContentProps = {
   subtitleTranslationTargetLanguage: string;
   subtitleTranslationOutputPath: string | null;
   subtitleTranslationBatchCharacters: number;
+  subtitleTranslationProxyUrl: string;
   subtitleTranslationProgressMessage: string | null;
   subtitleTranslationProgressPercent: number | null;
   isTranslatingSubtitle: boolean;
@@ -163,6 +164,7 @@ export type SubtitleMuxPageContentProps = {
   onChangeGenerationLanguage: (value: string) => void;
   onChangeSubtitleTranslationTargetLanguage: (value: string) => void;
   onChangeSubtitleTranslationBatchCharacters: (value: number) => void;
+  onChangeSubtitleTranslationProxyUrl: (value: string) => void;
   onUseGenerationVideoPath: (path: string) => void;
   onUseSubtitleTranslationPath: (path: string) => void;
   onDropGenerationVideoPaths: (paths: string[]) => void;
@@ -458,6 +460,7 @@ export const SubtitleMuxPageContent = ({
   subtitleTranslationTargetLanguage,
   subtitleTranslationOutputPath,
   subtitleTranslationBatchCharacters,
+  subtitleTranslationProxyUrl,
   subtitleTranslationProgressMessage,
   subtitleTranslationProgressPercent,
   isTranslatingSubtitle,
@@ -486,6 +489,7 @@ export const SubtitleMuxPageContent = ({
   onChangeGenerationLanguage,
   onChangeSubtitleTranslationTargetLanguage,
   onChangeSubtitleTranslationBatchCharacters,
+  onChangeSubtitleTranslationProxyUrl,
   onUseGenerationVideoPath,
   onUseSubtitleTranslationPath,
   onDropGenerationVideoPaths,
@@ -1476,9 +1480,28 @@ export const SubtitleMuxPageContent = ({
               <p className="mt-1.5 leading-5">
                 字幕翻译使用 Google 翻译在线服务，无需安装 FFmpeg、Python 或其他本地插件。请保持网络可用；翻译内容会发送至第三方服务。
               </p>
-              <p className="mt-1 leading-5">
-                若翻译失败，请检查网络或代理后重试。
-              </p>
+              <details className="mt-2">
+                <summary className="w-fit cursor-pointer select-none text-foreground/80 transition-colors hover:text-foreground">
+                  网络设置
+                </summary>
+                <label className="mt-2 grid max-w-sm gap-1.5">
+                  <span>代理地址（可选）</span>
+                  <input
+                    data-subtitle-translation-proxy-input="true"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="off"
+                    value={subtitleTranslationProxyUrl}
+                    placeholder="http://127.0.0.1:7890"
+                    disabled={isTranslatingSubtitle}
+                    onChange={(event) =>
+                      onChangeSubtitleTranslationProxyUrl(event.target.value)
+                    }
+                    className="h-[var(--control-height-md)] min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2.5 text-[length:var(--font-size-control)] text-foreground outline-none transition-colors placeholder:text-[var(--form-field-placeholder)] focus:border-[var(--control-accent)] focus:bg-[var(--form-field-focus-bg)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
+                  />
+                  <span>留空则直连。</span>
+                </label>
+              </details>
             </div>
 
             <TranslationWorkflowStep

@@ -125,6 +125,7 @@ export const SubtitleMuxPage = ({
     subtitleTranslationBatchCharacters,
     setSubtitleTranslationBatchCharacters,
   ] = useState(1500);
+  const [subtitleTranslationProxyUrl, setSubtitleTranslationProxyUrl] = useState("");
   const [subtitleTranslationPath, setSubtitleTranslationPath] =
     useState<string | null>(null);
   const [translatedSubtitlePath, setTranslatedSubtitlePath] =
@@ -345,6 +346,12 @@ export const SubtitleMuxPage = ({
         setWhisperModelPath(null);
         setWhisperCoreMlStatus(null);
       });
+  }, []);
+
+  useEffect(() => {
+    void desktopApi.configGet("subtitle_translation_proxy_url").then((value) => {
+      setSubtitleTranslationProxyUrl(value?.trim() || "");
+    });
   }, []);
 
   useEffect(() => {
@@ -1104,6 +1111,11 @@ export const SubtitleMuxPage = ({
     });
   };
 
+  const handleChangeSubtitleTranslationProxyUrl = (value: string) => {
+    setSubtitleTranslationProxyUrl(value);
+    void desktopApi.configSet("subtitle_translation_proxy_url", value.trim());
+  };
+
   const handleStart = async () => {
     if (!draft.videoPath || !draft.subtitlePath || !draft.outputPath) {
       setMergeStatus({ tone: "error", message: "请拖入 1 个视频文件和 1 个字幕文件" });
@@ -1193,6 +1205,7 @@ export const SubtitleMuxPage = ({
         subtitleTranslationTargetLanguage={subtitleTranslationTargetLanguage}
         subtitleTranslationOutputPath={subtitleTranslationOutputPath}
         subtitleTranslationBatchCharacters={subtitleTranslationBatchCharacters}
+        subtitleTranslationProxyUrl={subtitleTranslationProxyUrl}
         subtitleTranslationProgressMessage={subtitleTranslationProgress.message}
         subtitleTranslationProgressPercent={subtitleTranslationProgress.percent}
         generationDurationMs={generationDurationMs}
@@ -1269,6 +1282,7 @@ export const SubtitleMuxPage = ({
         onChangeSubtitleTranslationBatchCharacters={
           handleChangeSubtitleTranslationBatchCharacters
         }
+        onChangeSubtitleTranslationProxyUrl={handleChangeSubtitleTranslationProxyUrl}
         onUseGenerationVideoPath={(path) => void loadGenerationVideo(path)}
         onUseSubtitleTranslationPath={useSubtitleTranslationPath}
         onDropGenerationVideoPaths={handleDropGenerationVideoPaths}

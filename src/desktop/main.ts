@@ -135,7 +135,10 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
       },
       cancelTranscribeVideoSubtitle: ({ videoPath }) => activeTranscriptions.get(videoPath)?.abort(),
       translateSubtitleFile: async (input) => {
-        const translateText = createGoogleTranslateTextService(requestRaw);
+        const proxyUrl = (await configGet("subtitle_translation_proxy_url"))?.trim();
+        const translateText = createGoogleTranslateTextService(requestRaw, {
+          proxyConfig: proxyUrl ? { enabled: true, url: proxyUrl } : undefined,
+        });
         return translateSubtitleFile(input, {
           translateText: async (request) => (await translateText(request)).translatedText,
           onProgress: (progress) => rpc.send.subtitleTranslationProgress({ subtitlePath: input.subtitlePath, ...progress }),
