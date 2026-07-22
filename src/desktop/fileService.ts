@@ -1,5 +1,4 @@
-import { existsSync, mkdirSync, renameSync, statSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { Utils } from "electrobun/bun";
 
@@ -106,17 +105,6 @@ const buildWindowsRevealScript = () =>
     "utf16le"
   ).toString("base64");
 
-const buildWindowsTrashScript = () =>
-  Buffer.from(
-    [
-      "$ErrorActionPreference = 'Stop'",
-      "$path = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:ELECTROBUN_TRASH_PATH_B64))",
-      "Add-Type -AssemblyName Microsoft.VisualBasic",
-      "[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($path, 'OnlyErrorDialogs', 'SendToRecycleBin')",
-    ].join("\n"),
-    "utf16le"
-  ).toString("base64");
-
 export const getRevealCommand = (
   filePath: string,
   isDirectory: boolean,
@@ -184,121 +172,5 @@ export const revealFilePath = async (filePath: string): Promise<void> => {
   if (result.exitCode !== 0) {
     const stderr = result.stderr ? new TextDecoder().decode(result.stderr).trim() : "";
     throw new Error(stderr || `命令执行失败: ${command.join(" ")}`);
-  }
-};
-
-export const getTrashCommand = (
-  filePath: string,
-  platform = process.platform
-): {
-  command: string[];
-  env?: Record<string, string | undefined>;
-  stdin?: string;
-} | null => {
-  if (platform === "darwin") {
-    return null;
-  }
-
-  if (platform === "win32") {
-    return {
-      command: [
-        "powershell.exe",
-        "-NoProfile",
-        "-NonInteractive",
-        "-STA",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-EncodedCommand",
-        buildWindowsTrashScript(),
-      ],
-      env: {
-        ...process.env,
-        ELECTROBUN_TRASH_PATH_B64: Buffer.from(
-          normalizeWindowsPath(filePath),
-          "utf8"
-        ).toString("base64"),
-      },
-    };
-  }
-
-  return {
-    command: ["gio", "trash", filePath],
-    env: process.env,
-  };
-};
-
-export const getMacTrashDirectory = (
-  filePath: string,
-  homeDir = homedir(),
-  uid = process.getuid?.() ?? 501
-): string => {
-  const segments = filePath.split(path.sep).filter(Boolean);
-  if (segments[0] === "Volumes" && segments[1]) {
-    return path.join(path.sep, "Volumes", segments[1], ".Trashes", String(uid));
-  }
-
-  return path.join(homeDir, ".Trash");
-};
-
-export const getUniqueTrashPath = (
-  trashDirectory: string,
-  fileName: string
-): string => {
-  const parsed = path.parse(fileName);
-  let candidate = path.join(trashDirectory, fileName);
-  let index = 1;
-
-  while (existsSync(candidate)) {
-    candidate = path.join(
-      trashDirectory,
-      `${parsed.name} ${index}${parsed.ext}`
-    );
-    index += 1;
-  }
-
-  return candidate;
-};
-
-export interface MoveFileToTrashOptions {
-  platform?: NodeJS.Platform;
-  homeDir?: string;
-  uid?: number;
-}
-
-export const moveFileToTrash = async (
-  filePath: string,
-  options: MoveFileToTrashOptions = {}
-): Promise<void> => {
-  if (!existsSync(filePath)) {
-    throw new Error(describeMissingPath(filePath));
-  }
-
-  const platform = options.platform ?? process.platform;
-  if (platform === "darwin") {
-    const trashDirectory = getMacTrashDirectory(
-      filePath,
-      options.homeDir,
-      options.uid
-    );
-    mkdirSync(trashDirectory, { recursive: true });
-    renameSync(
-      filePath,
-      getUniqueTrashPath(trashDirectory, path.basename(filePath))
-    );
-    return;
-  }
-
-  const trashCommand = getTrashCommand(filePath, platform);
-  if (!trashCommand) return;
-
-  const { command, env, stdin } = trashCommand;
-  const result = Bun.spawnSync(command, {
-    env,
-    stdin: stdin ? new Blob([stdin]) : undefined,
-  });
-
-  if (result.exitCode !== 0) {
-    const stderr = result.stderr ? new TextDecoder().decode(result.stderr).trim() : "";
-    throw new Error(stderr || `无法移动到废纸篓: ${filePath}`);
   }
 };

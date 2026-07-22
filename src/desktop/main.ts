@@ -63,7 +63,8 @@ const getFasterWhisperConfig = async () => ({
   modelPath: (await configGet("faster_whisper_model_path"))?.trim() || "",
 });
 
-const rpc = BrowserView.defineRPC<DesktopRPC>({
+const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
+  BrowserView.defineRPC<DesktopRPC>({
   maxRequestTime: DESKTOP_RPC_MAX_REQUEST_TIME_MS,
   handlers: {
     requests: {
@@ -71,8 +72,6 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
       configSet: async ({ key, value }) => (await configSet(key, value)) ?? "",
       openFilePath: ({ filePath }) => openFilePath(filePath),
       revealFilePath: ({ filePath }) => revealFilePath(filePath),
-      minimizeWindow: () => mainWindow?.minimize(),
-      closeWindow: () => Utils.quit(),
       selectSubtitleMuxVideoFile: () => chooseSubtitleMuxFile({ openFileDialog: Utils.openFileDialog, allowedFileTypes: "mp4,mkv,avi,mov,wmv,m4v,ts,webm" }),
       selectSubtitleMuxSubtitleFile: () => chooseSubtitleMuxFile({ openFileDialog: Utils.openFileDialog, allowedFileTypes: "srt,ass,ssa" }),
       selectSubtitleTranslationFile: () => chooseSubtitleMuxFile({ openFileDialog: Utils.openFileDialog, allowedFileTypes: "srt" }),
@@ -95,7 +94,6 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
           reused: false,
         };
       },
-      getRuntimeEnvironment: () => ({ platform: process.platform, arch: process.arch, isAppleSilicon: process.platform === "darwin" && process.arch === "arm64" }),
       getFfmpegStatus: async () => getCliStatus(await getFfmpegPath(), ["-version"]),
       getFasterWhisperStatus: async () => getFasterWhisperStatus(await getFasterWhisperConfig()),
       mergeVideoWithSubtitle: async ({ videoPath, subtitlePath, outputPath }) =>
@@ -171,7 +169,7 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
     },
     messages: {},
   },
-});
+  });
 
 mainWindow = new BrowserWindow({
   title: "字幕鸭",

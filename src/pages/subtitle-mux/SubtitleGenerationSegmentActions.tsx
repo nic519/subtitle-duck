@@ -1,4 +1,6 @@
 import {
+  ArrowLeftFromLine,
+  ArrowRightFromLine,
   ChevronLeft,
   ChevronRight,
   Pause,
@@ -37,6 +39,8 @@ export const SubtitleGenerationSegmentActions = ({
     onSeek(Math.min(durationMs, Math.max(0, playheadMs + offsetMs)));
   const iconButtonClassName =
     "grid size-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/[0.09] hover:text-foreground disabled:pointer-events-none disabled:opacity-35";
+  const rangeButtonClassName =
+    "group inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[length:var(--font-size-caption)] font-medium text-muted-foreground transition-[background-color,color,transform] hover:bg-white/[0.075] hover:text-foreground focus-visible:bg-white/[0.075] focus-visible:text-foreground focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35";
 
   return (
     <div className="-mt-1 flex w-full flex-wrap items-center justify-center gap-3">
@@ -99,21 +103,24 @@ export const SubtitleGenerationSegmentActions = ({
           <SkipForward className="size-3.5" />
         </button>
       </div>
-      <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/[0.16] p-0.5">
+      <div className="flex items-center gap-0.5">
         <button
           type="button"
           onClick={onSetStart}
           disabled={disabled || !canSetStart}
-          className="rounded-full border border-[var(--subtitle-accent-border)] bg-[var(--subtitle-accent-soft)] px-3 py-1.5 text-[length:var(--font-size-caption)] font-medium text-foreground shadow-[inset_0_1px_0_rgb(255_255_255_/_0.08)] transition-colors hover:bg-[var(--subtitle-accent-border)] disabled:pointer-events-none disabled:opacity-35"
+          className={rangeButtonClassName}
         >
+          <ArrowRightFromLine className="size-3.5 text-white/40 transition-colors group-hover:text-[var(--subtitle-accent-muted)] group-focus-visible:text-[var(--subtitle-accent-muted)]" />
           设为开始
         </button>
+        <span aria-hidden="true" className="h-3.5 w-px bg-white/10" />
         <button
           type="button"
           onClick={onSetEnd}
           disabled={disabled || !canSetEnd}
-          className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-[length:var(--font-size-caption)] font-medium text-foreground shadow-[inset_0_1px_0_rgb(255_255_255_/_0.06)] transition-colors hover:bg-white/[0.1] disabled:pointer-events-none disabled:opacity-35"
+          className={rangeButtonClassName}
         >
+          <ArrowLeftFromLine className="size-3.5 text-white/40 transition-colors group-hover:text-[var(--subtitle-accent-muted)] group-focus-visible:text-[var(--subtitle-accent-muted)]" />
           设为结束
         </button>
       </div>

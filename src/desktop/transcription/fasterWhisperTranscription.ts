@@ -16,9 +16,6 @@ parser.add_argument("--model", required=True)
 parser.add_argument("--audio", required=True)
 parser.add_argument("--output", required=True)
 parser.add_argument("--language", default="ja")
-parser.add_argument("--task", default="translate")
-parser.add_argument("--device", default="cpu")
-parser.add_argument("--compute-type", default="int8")
 args = parser.parse_args()
 
 def srt_timestamp(seconds):
@@ -37,13 +34,13 @@ except Exception:
 print("SUBTITLE_DUCK_FASTER_WHISPER_PROGRESS=0", flush=True)
 model = WhisperModel(
     args.model,
-    device=args.device,
-    compute_type=args.compute_type,
+    device="cpu",
+    compute_type="int8",
 )
 segments, _ = model.transcribe(
     args.audio,
     language=None if args.language == "auto" else args.language,
-    task=args.task,
+    task="translate",
     beam_size=5,
     vad_filter=True,
     condition_on_previous_text=False,
@@ -66,9 +63,6 @@ export type FasterWhisperCommandInput = {
   audioPath: string;
   outputPath: string;
   language: string;
-  task?: "translate" | "transcribe";
-  device?: "cpu" | "cuda";
-  computeType?: string;
 };
 
 export const buildFasterWhisperCommand = ({
@@ -77,9 +71,6 @@ export const buildFasterWhisperCommand = ({
   audioPath,
   outputPath,
   language,
-  task = "translate",
-  device = "cpu",
-  computeType = "int8",
 }: FasterWhisperCommandInput): string[] => [
   pythonPath,
   "-c",
@@ -92,12 +83,6 @@ export const buildFasterWhisperCommand = ({
   outputPath,
   "--language",
   language,
-  "--task",
-  task,
-  "--device",
-  device,
-  "--compute-type",
-  computeType,
 ];
 
 export const parseFasterWhisperProgressText = (

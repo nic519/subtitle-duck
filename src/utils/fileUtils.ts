@@ -19,13 +19,3 @@ export const revealInFolder = async (filePath: string): Promise<void> => {
     );
   }
 };
-
-export const deleteFile = async (filePath: string): Promise<void> => {
-  try {
-    await desktopApi.moveFileToTrash(filePath);
-  } catch (err: unknown) {
-    throw new Error(
-      `删除文件失败: ${err instanceof Error ? err.message : String(err)}`
-    );
-  }
-};

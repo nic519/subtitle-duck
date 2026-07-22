@@ -34,8 +34,6 @@ export type DesktopRPC = {
       configSet: { params: { key: string; value: string }; response: string };
       openFilePath: { params: { filePath: string }; response: void };
       revealFilePath: { params: { filePath: string }; response: void };
-      minimizeWindow: { params: void; response: void };
-      closeWindow: { params: void; response: void };
       selectSubtitleMuxVideoFile: { params: void; response: string | null };
       selectSubtitleMuxSubtitleFile: { params: void; response: string | null };
       selectSubtitleTranslationFile: { params: void; response: string | null };
@@ -46,7 +44,6 @@ export type DesktopRPC = {
       getWhisperVideoDuration: { params: { videoPath: string }; response: { durationMs: number } };
       getLocalVideoPreviewUrl: { params: { videoPath: string }; response: { url: string } };
       getCompatibleVideoPreviewUrl: { params: { videoPath: string }; response: { url: string; reused: boolean } };
-      getRuntimeEnvironment: { params: void; response: { platform: NodeJS.Platform; arch: string; isAppleSilicon: boolean } };
       mergeVideoWithSubtitle: { params: { videoPath: string; subtitlePath: string; outputPath: string }; response: { outputPath: string } };
       transcribeVideoSubtitle: { params: { videoPath: string; ranges: WhisperTimeRange[]; durationMs: number; language: string }; response: WhisperMultiRangeTranscriptionResult };
       cancelTranscribeVideoSubtitle: { params: { videoPath: string }; response: void };

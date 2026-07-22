@@ -135,28 +135,6 @@ export const getAvailableWhisperOutputPathForRanges = (
   throw new Error("无法生成可用的字幕输出路径");
 };
 
-export const getAvailableWhisperOutputPath = (
-  videoPath: string,
-  checkExists: (filePath: string) => boolean = existsSync,
-  range?: WhisperTimeRange,
-  durationMs?: number
-): string => {
-  const outputBasePath = getDefaultWhisperOutputBasePath(
-    videoPath,
-    range,
-    durationMs
-  );
-  const defaultPath = `${outputBasePath}.srt`;
-  if (!checkExists(defaultPath)) return defaultPath;
-
-  for (let index = 2; index < 1000; index += 1) {
-    const candidate = `${outputBasePath}-${index}.srt`;
-    if (!checkExists(candidate)) return candidate;
-  }
-
-  throw new Error("无法生成可用的字幕输出路径");
-};
-
 export const buildExtractWhisperAudioCommand = ({
   videoPath,
   audioPath,
@@ -196,48 +174,6 @@ export const buildExtractWhisperAudioCommand = ({
   ];
 };
 
-const WHISPER_STABILITY_ARGS = [
-  "-mc",
-  "0",
-  "-tp",
-  "0",
-  "-tpi",
-  "0",
-  "-et",
-  "2.4",
-  "-lpt",
-  "-1.0",
-  "-nth",
-  "0.6",
-  "-sns",
-];
-
-export const buildWhisperCommand = ({
-  whisperPath,
-  modelPath,
-  audioPath,
-  outputBasePath,
-  language,
-}: {
-  whisperPath: string;
-  modelPath: string;
-  audioPath: string;
-  outputBasePath: string;
-  language: string;
-}): string[] => [
-  whisperPath,
-  "-m",
-  modelPath,
-  "-f",
-  audioPath,
-  ...(language && language !== "auto" ? ["-l", language] : []),
-  ...WHISPER_STABILITY_ARGS,
-  "-osrt",
-  "-of",
-  outputBasePath,
-  "--print-progress",
-];
-
 const shellSafeTextPattern = /^[A-Za-z0-9_/:=.,@%+-]+$/;
 
 export const formatCommandForDisplay = (command: string[]): string =>
@@ -248,20 +184,6 @@ export const formatCommandForDisplay = (command: string[]): string =>
         : `'${part.replace(/'/g, "'\\''")}'`
     )
     .join(" ");
-
-export const parseWhisperProgressText = (
-  text: string
-): WhisperTranscriptionProgress | null => {
-  const matched = text.match(/\bprogress\s*=\s*(\d{1,3})%/i);
-  if (!matched?.[1]) return null;
-
-  const percent = Math.max(0, Math.min(100, Number.parseInt(matched[1], 10)));
-  return {
-    phase: "transcribing",
-    percent,
-    message: `正在识别 ${percent}%`,
-  };
-};
 
 const parseSrtTimestamp = (timestamp: string): number | null => {
   const matched = timestamp.match(/^(\d{2}):(\d{2}):(\d{2}),(\d{3})$/);
@@ -371,35 +293,8 @@ const readFasterWhisperProgress = async (
 ): Promise<void> =>
   readTranscriptionProgress(stream, onProgress, parseFasterWhisperProgressText);
 
-const readStreamText = async (
-  stream: ReadableStream<Uint8Array> | null,
-  onProgress?: (progress: WhisperTranscriptionProgress) => void
-): Promise<string> => {
-  if (!stream) return "";
-
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let pendingText = "";
-  let fullText = "";
-  let isDone = false;
-
-  while (!isDone) {
-    const { done, value } = await reader.read();
-    isDone = done;
-    const chunkText = decoder.decode(value, { stream: !done });
-    fullText += chunkText;
-    pendingText += chunkText;
-    const lines = pendingText.split(/\r?\n/);
-    pendingText = done ? "" : lines.pop() ?? "";
-
-    for (const line of lines) {
-      const progress = parseWhisperProgressText(line);
-      if (progress) onProgress?.(progress);
-    }
-  }
-
-  return fullText;
-};
+const readStreamText = (stream: ReadableStream<Uint8Array> | null) =>
+  stream ? new Response(stream).text() : Promise.resolve("");
 
 const createWhisperCancellationError = () => new Error("字幕生成已停止");
 
@@ -430,7 +325,6 @@ const runCommand = async (
       options: Parameters<typeof Bun.spawn>[1]
     ) => SpawnProcess;
     onStdout?: (stream: ReadableStream<Uint8Array> | null) => Promise<void>;
-    onStderrProgress?: (progress: WhisperTranscriptionProgress) => void;
     abortSignal?: AbortSignal;
   }
 ): Promise<string> => {
@@ -465,7 +359,7 @@ const runCommand = async (
   const [exitCode, stderrText] = await Promise.race([
     Promise.all([
       process.exited,
-      readStreamText(process.stderr as ReadableStream<Uint8Array>, deps.onStderrProgress),
+      readStreamText(process.stderr as ReadableStream<Uint8Array>),
       deps.onStdout?.(process.stdout as ReadableStream<Uint8Array>),
     ]),
     abortPromise,
@@ -667,7 +561,6 @@ export const transcribeVideoSubtitle = async (
       await runCommand(whisperCommand, {
         spawn,
         onStdout: (stream) => readFasterWhisperProgress(stream, onSegmentProgress),
-        onStderrProgress: onSegmentProgress,
         abortSignal: deps.abortSignal,
       });
 
@@ -713,6 +606,7 @@ export const transcribeVideoSubtitleRanges = async (
       options: {
         abortSignal?: AbortSignal;
         onProgress?: (progress: WhisperTranscriptionProgress) => void;
+        resolveExecutable?: (executable: string) => string;
       }
     ) => Promise<WhisperTranscriptionResult>;
     readFile?: (path: string, encoding: "utf-8") => Promise<string>;
@@ -724,6 +618,7 @@ export const transcribeVideoSubtitleRanges = async (
     rm?: (path: string, options?: { force?: boolean }) => Promise<void>;
     abortSignal?: AbortSignal;
     onProgress?: (progress: WhisperTranscriptionProgress) => void;
+    resolveExecutable?: (executable: string) => string;
   } = {}
 ): Promise<WhisperMultiRangeTranscriptionResult> => {
   const ranges = [...input.ranges].sort(
@@ -770,6 +665,7 @@ export const transcribeVideoSubtitleRanges = async (
         },
         {
           abortSignal: deps.abortSignal,
+          resolveExecutable: deps.resolveExecutable,
           onProgress: (progress) => {
             const overallPercent =
               progress.phase === "transcribing" &&

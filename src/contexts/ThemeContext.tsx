@@ -3,7 +3,6 @@ import { desktopApi } from "@/desktop/client";
 import {
   getDefaultUiFontSize,
   getInitialUiFontSize,
-  sanitizeUiFontSize,
   UI_FONT_SIZE_CONFIG_KEY,
   type UiFontSize,
 } from "@/settings/uiFontSize";
@@ -11,10 +10,6 @@ import { detectUiPlatform } from "../utils/platform";
 
 interface ThemeContextType {
   darkMode: boolean;
-  uiFontSize: UiFontSize;
-  toggleDarkMode: () => void;
-  setDarkMode: (value: boolean) => void;
-  setUiFontSize: (value: UiFontSize) => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -39,7 +34,7 @@ const applyUiFontSizeDataset = (value: UiFontSize) => {
 
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   const initialPlatform = getCurrentUiPlatform();
-  const [darkMode, setDarkMode] = useState(() => {
+  const [darkMode] = useState(() => {
     const savedDarkMode = localStorage.getItem("darkMode");
     const isDark = savedDarkMode === null ? true : savedDarkMode === "true";
 
@@ -51,10 +46,10 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 
     return isDark;
   });
-  const [uiFontSize, setUiFontSizeState] = useState<UiFontSize>(() => {
-    const initialUiFontSize = getDefaultUiFontSize(initialPlatform);
-    applyUiFontSizeDataset(initialUiFontSize);
-    return initialUiFontSize;
+  const [uiFontSize, setUiFontSize] = useState<UiFontSize>(() => {
+    const value = getDefaultUiFontSize(initialPlatform);
+    applyUiFontSizeDataset(value);
+    return value;
   });
 
   useEffect(() => {
@@ -75,8 +70,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     void desktopApi.configGet(UI_FONT_SIZE_CONFIG_KEY).then((storedValue) => {
       if (!isMounted) return;
       const nextValue = getInitialUiFontSize(platform, storedValue);
-      setUiFontSizeState(nextValue);
-      applyUiFontSizeDataset(nextValue);
+      setUiFontSize(nextValue);
     });
 
     return () => {
@@ -88,21 +82,8 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     applyUiFontSizeDataset(uiFontSize);
   }, [uiFontSize]);
 
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-  };
-
-  const setUiFontSize = async (value: UiFontSize) => {
-    const nextValue = sanitizeUiFontSize(value) ?? "standard";
-    setUiFontSizeState(nextValue);
-    applyUiFontSizeDataset(nextValue);
-    await desktopApi.configSet(UI_FONT_SIZE_CONFIG_KEY, nextValue);
-  };
-
   return (
-    <ThemeContext.Provider
-      value={{ darkMode, uiFontSize, toggleDarkMode, setDarkMode, setUiFontSize }}
-    >
+    <ThemeContext.Provider value={{ darkMode }}>
       {children}
     </ThemeContext.Provider>
   );

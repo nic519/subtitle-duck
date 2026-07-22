@@ -29,37 +29,6 @@ const chooseDirectory = (openFileDialog: OpenFileDialog): Promise<string | null>
     canChooseDirectory: true,
   });
 
-export const chooseLibraryFolder = async ({
-  openFileDialog,
-}: {
-  openFileDialog: OpenFileDialog;
-}): Promise<string | null> => chooseDirectory(openFileDialog);
-
-export const chooseDatabaseExportFolder = async ({
-  openFileDialog,
-}: {
-  openFileDialog: OpenFileDialog;
-}): Promise<string | null> => chooseDirectory(openFileDialog);
-
-export const chooseDatabaseImportFile = async ({
-  openFileDialog,
-}: {
-  openFileDialog: OpenFileDialog;
-}): Promise<string | null> =>
-  chooseSinglePath(openFileDialog, {
-    allowedFileTypes: "sqlite,db",
-    canChooseFiles: true,
-    canChooseDirectory: false,
-  });
-
-/** 选择旧 PH 软件生成的 SQLite 数据库文件。 */
-export const chooseLegacyPhDatabaseFile = async ({
-  openFileDialog,
-}: {
-  openFileDialog: OpenFileDialog;
-}): Promise<string | null> =>
-  chooseDatabaseImportFile({ openFileDialog });
-
 export const chooseSubtitleMuxFile = async ({
   openFileDialog,
   allowedFileTypes,
@@ -69,17 +38,6 @@ export const chooseSubtitleMuxFile = async ({
 }): Promise<string | null> =>
   chooseSinglePath(openFileDialog, {
     allowedFileTypes,
-    canChooseFiles: true,
-    canChooseDirectory: false,
-  });
-
-export const chooseWhisperModelFile = async ({
-  openFileDialog,
-}: {
-  openFileDialog: OpenFileDialog;
-}): Promise<string | null> =>
-  chooseSinglePath(openFileDialog, {
-    allowedFileTypes: "bin",
     canChooseFiles: true,
     canChooseDirectory: false,
   });
@@ -106,17 +64,6 @@ export const chooseCliExecutableFile = async ({
   openFileDialog: OpenFileDialog;
 }): Promise<string | null> =>
   chooseSinglePath(openFileDialog, {
-    canChooseFiles: true,
-    canChooseDirectory: false,
-  });
-
-export const chooseWhisperCoreMlPackageFile = async ({
-  openFileDialog,
-}: {
-  openFileDialog: OpenFileDialog;
-}): Promise<string | null> =>
-  chooseSinglePath(openFileDialog, {
-    allowedFileTypes: "zip",
     canChooseFiles: true,
     canChooseDirectory: false,
   });

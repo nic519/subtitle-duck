@@ -3,15 +3,14 @@ import {
   useRef,
   useState,
   type ReactElement,
+  type ReactNode,
 } from "react";
 import {
   AlertCircle,
-  Archive,
   Captions,
   CircleCheck,
   CircleX,
   Combine,
-  ExternalLink,
   FolderOpen,
   Languages,
   LoaderCircle,
@@ -40,6 +39,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { Popover as PopoverPrimitive } from "radix-ui";
 import type { SubtitleGenerationSegment } from "../../subtitle-mux/subtitleGenerationSegments";
 import { buildStreamingPreviewSeekUrl } from "../../subtitle-mux/streamingVideoPreview";
 import { SubtitleGenerationSegmentEditor } from "./SubtitleGenerationSegmentEditor";
@@ -52,30 +52,12 @@ type FfmpegStatus = {
   error: string | null;
 };
 
-type WhisperStatus = {
+type FasterWhisperStatus = {
   available: boolean;
   path: string | null;
   version: string | null;
   error: string | null;
 };
-
-type SubtitleTranscriptionEngine = "whisper.cpp" | "faster-whisper";
-
-type FasterWhisperStatus = WhisperStatus;
-
-type WhisperCoreMlStatus = {
-  available: boolean;
-  expectedPath: string | null;
-  installedPath: string | null;
-  error: string | null;
-};
-
-const subtitleGenerationLanguageOptions = [
-  { value: "auto", label: "自动" },
-  { value: "ja", label: "日语" },
-  { value: "zh", label: "中文" },
-  { value: "en", label: "英语" },
-];
 
 const subtitleGenerationVideoExtensions = new Set([
   ".mp4",
@@ -119,17 +101,10 @@ export type SubtitleMuxPageContentProps = {
   isCancelingGeneration: boolean;
   ffmpegStatus: FfmpegStatus | null;
   ffmpegPath: string;
-  transcriptionEngine: SubtitleTranscriptionEngine;
-  whisperStatus: WhisperStatus | null;
-  whisperBinaryPath: string;
   fasterWhisperStatus: FasterWhisperStatus | null;
-  whisperCoreMlStatus: WhisperCoreMlStatus | null;
-  isAppleSilicon: boolean;
-  whisperModelPath: string | null;
   fasterWhisperPythonPath: string | null;
   fasterWhisperModelPath: string | null;
   fasterWhisperModelHistory: string[];
-  generationLanguage: string;
   generatedSubtitlePath: string | null;
   progressMessage: string | null;
   transcriptionProgressMessage: string | null;
@@ -157,21 +132,15 @@ export type SubtitleMuxPageContentProps = {
   onChooseSubtitle: () => void | Promise<void>;
   onChooseGenerationVideo: () => void | Promise<void>;
   onChooseSubtitleTranslationFile: () => void | Promise<void>;
-  onChooseWhisperModel: () => void | Promise<void>;
   onChooseFfmpegBinary: () => void | Promise<void>;
-  onChooseWhisperBinary: () => void | Promise<void>;
   onChooseFasterWhisperPython: () => void | Promise<void>;
   onChooseFasterWhisperModel: () => void | Promise<void>;
-  onChooseWhisperCoreMlPackage: () => void | Promise<void>;
   onChangeFfmpegPath: (path: string) => void | Promise<void>;
   onSaveFfmpegPath: (path: string) => void | Promise<void>;
-  onChangeWhisperBinaryPath: (path: string) => void | Promise<void>;
-  onSaveWhisperBinaryPath: (path: string) => void | Promise<void>;
   onChangeFasterWhisperPythonPath: (path: string) => void | Promise<void>;
   onSaveFasterWhisperPythonPath: (path: string) => void | Promise<void>;
   onChangeFasterWhisperModelPath: (path: string) => void | Promise<void>;
   onSaveFasterWhisperModelPath: (path: string) => void | Promise<void>;
-  onChangeGenerationLanguage: (value: string) => void;
   onChangeSubtitleTranslationTargetLanguage: (value: string) => void;
   onChangeSubtitleTranslationBatchCharacters: (value: number) => void;
   onChangeSubtitleTranslationProxyUrl: (value: string) => void;
@@ -191,7 +160,6 @@ export type SubtitleMuxPageContentProps = {
   onRevealGeneratedSubtitle: () => void | Promise<void>;
   onRevealTranslatedSubtitle: () => void | Promise<void>;
   onRefreshFfmpegStatus: () => void | Promise<void>;
-  onRefreshWhisperStatus: () => void | Promise<void>;
   onRefreshFasterWhisperStatus: () => void | Promise<void>;
   onStart: () => void | Promise<void>;
   onClear: () => void;
@@ -242,20 +210,36 @@ const getPathDirectory = (path: string | null): string | null => {
 
 type TranslationStepState = "complete" | "current" | "upcoming";
 
-const TranslationWorkflowStep = ({
+const getWorkflowStepStates = ({
+  hasInput,
+  isComplete,
+}: {
+  hasInput: boolean;
+  isComplete: boolean;
+}) => ({
+  file: hasInput ? "complete" : "current",
+  settings: hasInput ? "complete" : "upcoming",
+  progress: isComplete ? "complete" : hasInput ? "current" : "upcoming",
+}) satisfies Record<"file" | "settings" | "progress", TranslationStepState>;
+
+const WorkflowStep = ({
+  workflow = "translation",
   id,
   number,
   title,
+  titleAccessory,
   state,
   isLast,
   children,
 }: {
-  id: "file" | "settings" | "progress";
+  workflow?: "translation" | "generation";
+  id: string;
   number: string;
   title: string;
+  titleAccessory?: ReactElement;
   state: TranslationStepState;
   isLast: boolean;
-  children: ReactElement;
+  children: ReactNode;
 }) => {
   const markerClassName =
     state === "complete"
@@ -268,18 +252,22 @@ const TranslationWorkflowStep = ({
 
   return (
     <section
-      data-subtitle-translation-step={id}
+      data-subtitle-workflow={workflow}
+      data-subtitle-translation-step={workflow === "translation" ? id : undefined}
+      data-subtitle-generation-step={workflow === "generation" ? id : undefined}
       data-step-state={state}
       aria-current={state === "current" ? "step" : undefined}
       className="grid min-w-0 grid-cols-[28px_minmax(0,1fr)] gap-4"
     >
       <div className="relative flex justify-center">
         <div
-          data-subtitle-translation-step-marker-backdrop={id}
+          data-subtitle-translation-step-marker-backdrop={workflow === "translation" ? id : undefined}
+          data-subtitle-generation-step-marker-backdrop={workflow === "generation" ? id : undefined}
           className="relative z-10 flex size-9 items-center justify-center rounded-full bg-[var(--app-bg)]"
         >
           <div
-            data-subtitle-translation-step-marker={id}
+            data-subtitle-translation-step-marker={workflow === "translation" ? id : undefined}
+            data-subtitle-generation-step-marker={workflow === "generation" ? id : undefined}
             className={`flex size-7 items-center justify-center rounded-full border text-[11px] font-bold tracking-tight transition-all duration-300 motion-reduce:transition-none ${markerClassName}`}
             aria-hidden="true"
           >
@@ -288,7 +276,8 @@ const TranslationWorkflowStep = ({
         </div>
         {isLast ? null : (
           <Separator
-            data-subtitle-translation-step-thread={id}
+            data-subtitle-translation-step-thread={workflow === "translation" ? id : undefined}
+            data-subtitle-generation-step-thread={workflow === "generation" ? id : undefined}
             orientation="vertical"
             className="subtitle-accent-thread absolute bottom-[-28px] top-9 w-px opacity-60"
           />
@@ -297,11 +286,13 @@ const TranslationWorkflowStep = ({
       <div className={isLast ? "min-w-0" : "min-w-0 pb-6"}>
         <div className="mb-2 flex min-w-0 items-center gap-2">
           <h3
-            data-subtitle-translation-step-title={id}
+            data-subtitle-translation-step-title={workflow === "translation" ? id : undefined}
+            data-subtitle-generation-step-title={workflow === "generation" ? id : undefined}
             className="text-[length:var(--font-size-control)] font-semibold tracking-[-0.02em] text-foreground"
           >
             {title}
           </h3>
+          {titleAccessory}
           <span className="sr-only">（{stateLabel}）</span>
         </div>
         {children}
@@ -384,53 +375,27 @@ const FfmpegInstallGuide = ({
   </DependencyGuide>
 );
 
-const WhisperInstallGuide = ({
-  engine,
+const FasterWhisperInstallGuide = ({
   onRefresh,
   darkMode,
 }: {
-  engine: SubtitleTranscriptionEngine;
   onRefresh: () => void | Promise<void>;
   darkMode: boolean;
-}) =>
-  engine === "faster-whisper" ? (
-    <DependencyGuide
-      title="配置 Faster Whisper"
-      description="需要 Python、faster-whisper 包和已下载的 CT2 模型目录。安装后在上方分别选择 Python 与模型目录。"
-      onRefresh={onRefresh}
-      darkMode={darkMode}
-    >
-      <div className="grid gap-2">
-        <div>安装 Python 包</div>
-        <InstallCommand>python3 -m pip install --upgrade faster-whisper huggingface_hub</InstallCommand>
-        <div>下载模型（示例）</div>
-        <InstallCommand>huggingface-cli download Systran/faster-whisper-large-v3 --local-dir ~/Models/faster-whisper-large-v3</InstallCommand>
-      </div>
-    </DependencyGuide>
-  ) : (
-    <DependencyGuide
-      title="配置 whisper.cpp"
-      description="需要 whisper-cli 命令行工具和 GGML 格式模型。请将 whisper-cli 加入系统 PATH，然后在上方选择模型文件。"
-      onRefresh={onRefresh}
-      darkMode={darkMode}
-    >
-      <div className="grid gap-2">
-        <div>macOS（Homebrew）</div>
-        <InstallCommand>brew install whisper-cpp</InstallCommand>
-        <div>安装验证</div>
-        <InstallCommand>whisper-cli --help</InstallCommand>
-        <a
-          href="https://github.com/ggml-org/whisper.cpp"
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex w-fit items-center gap-1 text-[var(--subtitle-accent-muted)] hover:text-foreground"
-        >
-          查看 whisper.cpp 与模型下载说明
-          <ExternalLink className="size-3" />
-        </a>
-      </div>
-    </DependencyGuide>
-  );
+}) => (
+  <DependencyGuide
+    title="配置 Faster Whisper"
+    description="需要 Python、faster-whisper 包和已下载的 CT2 模型目录。安装后在上方分别选择 Python 与模型目录。"
+    onRefresh={onRefresh}
+    darkMode={darkMode}
+  >
+    <div className="grid gap-2">
+      <div>安装 Python 包</div>
+      <InstallCommand>python3 -m pip install --upgrade faster-whisper huggingface_hub</InstallCommand>
+      <div>下载模型（示例）</div>
+      <InstallCommand>huggingface-cli download Systran/faster-whisper-large-v3 --local-dir ~/Models/faster-whisper-large-v3</InstallCommand>
+    </div>
+  </DependencyGuide>
+);
 
 export const SubtitleMuxPageContent = ({
   darkMode,
@@ -451,17 +416,10 @@ export const SubtitleMuxPageContent = ({
   isCancelingGeneration,
   ffmpegStatus,
   ffmpegPath,
-  transcriptionEngine,
-  whisperStatus,
-  whisperBinaryPath,
   fasterWhisperStatus,
-  whisperCoreMlStatus,
-  isAppleSilicon,
-  whisperModelPath,
   fasterWhisperPythonPath,
   fasterWhisperModelPath,
   fasterWhisperModelHistory,
-  generationLanguage,
   generatedSubtitlePath,
   progressMessage,
   transcriptionProgressMessage,
@@ -489,21 +447,15 @@ export const SubtitleMuxPageContent = ({
   onChooseSubtitle,
   onChooseGenerationVideo,
   onChooseSubtitleTranslationFile,
-  onChooseWhisperModel,
   onChooseFfmpegBinary,
-  onChooseWhisperBinary,
   onChooseFasterWhisperPython,
   onChooseFasterWhisperModel,
-  onChooseWhisperCoreMlPackage,
   onChangeFfmpegPath,
   onSaveFfmpegPath,
-  onChangeWhisperBinaryPath,
-  onSaveWhisperBinaryPath,
   onChangeFasterWhisperPythonPath,
   onSaveFasterWhisperPythonPath,
   onChangeFasterWhisperModelPath,
   onSaveFasterWhisperModelPath,
-  onChangeGenerationLanguage,
   onChangeSubtitleTranslationTargetLanguage,
   onChangeSubtitleTranslationBatchCharacters,
   onChangeSubtitleTranslationProxyUrl,
@@ -523,7 +475,6 @@ export const SubtitleMuxPageContent = ({
   onRevealGeneratedSubtitle,
   onRevealTranslatedSubtitle,
   onRefreshFfmpegStatus,
-  onRefreshWhisperStatus,
   onRefreshFasterWhisperStatus,
   onStart,
   onClear,
@@ -547,13 +498,7 @@ export const SubtitleMuxPageContent = ({
   }, [generationVideoPreviewUrl]);
 
   const ffmpegUnavailable = ffmpegStatus?.available === false;
-  const whisperUnavailable = whisperStatus?.available === false;
   const fasterWhisperUnavailable = fasterWhisperStatus?.available === false;
-  const whisperStatusState = whisperStatus
-    ? whisperStatus.available
-      ? "available"
-      : "unavailable"
-    : "checking";
   const ffmpegStatusLabel = ffmpegStatus
     ? ffmpegStatus.available
       ? `ffmpeg 可用${ffmpegStatus.version ? `: ${ffmpegStatus.version.split(/\r?\n/)[0]}` : ""}`
@@ -567,31 +512,11 @@ export const SubtitleMuxPageContent = ({
   const ffmpegStatusTitle = [ffmpegStatusLabel, ffmpegStatus?.error]
     .filter(Boolean)
     .join(" · ");
-  const whisperCoreMlLabel = whisperCoreMlStatus
-    ? whisperCoreMlStatus.available
-      ? "Core ML 加速已就绪"
-      : "Core ML 加速未安装"
-    : "正在检测 Core ML 加速";
-  const whisperModelLabel = getPathTail(whisperModelPath);
   const fasterWhisperStatusState = fasterWhisperStatus
     ? fasterWhisperStatus.available
       ? "available"
       : "unavailable"
     : "checking";
-  const whisperCoreMlPath =
-    whisperCoreMlStatus?.installedPath ?? whisperCoreMlStatus?.expectedPath;
-  const whisperCoreMlTitle = [
-    whisperCoreMlLabel,
-    whisperCoreMlPath,
-    whisperCoreMlStatus?.error,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  const whisperCoreMlShortLabel = whisperCoreMlStatus
-    ? whisperCoreMlStatus.available
-      ? "Core ML 已就绪"
-      : "Core ML 未安装"
-    : "Core ML 检测中";
   const subtitleTranslationTargetLabel =
     subtitleTranslationLanguageOptions.find(
       (option) => option.value === subtitleTranslationTargetLanguage,
@@ -605,22 +530,23 @@ export const SubtitleMuxPageContent = ({
     Boolean(subtitleTranslationOutputPath) &&
     subtitleTranslationStatusTone === "success" &&
     !isTranslatingSubtitle;
-  const translationFileStepState: TranslationStepState = hasTranslationFile
-    ? "complete"
-    : "current";
-  const translationSettingsStepState: TranslationStepState = hasTranslationFile
-    ? "complete"
-    : "upcoming";
-  const translationProgressStepState: TranslationStepState =
-    translationIsComplete
-      ? "complete"
-      : hasTranslationFile
-        ? "current"
-        : "upcoming";
+  const translationStepStates = getWorkflowStepStates({
+    hasInput: hasTranslationFile,
+    isComplete: translationIsComplete,
+  });
   const subtitleTranslationFileName = getPathTail(subtitleTranslationPath);
   const subtitleTranslationOutputName = getPathTail(
     subtitleTranslationOutputPath,
   );
+  const hasGenerationVideo = Boolean(generationVideoPath);
+  const generationIsComplete =
+    Boolean(generatedSubtitlePath) &&
+    generationStatusTone === "success" &&
+    !isGenerating;
+  const generationStepStates = getWorkflowStepStates({
+    hasInput: hasGenerationVideo,
+    isComplete: generationIsComplete,
+  });
   const canClearMerge = Boolean(
     videoPath ||
       subtitlePath ||
@@ -718,50 +644,65 @@ export const SubtitleMuxPageContent = ({
             >
               {subtitleTools.map(renderToolTab)}
             </nav>
-            <details className="group relative mt-2 min-w-0 shrink-0 md:mt-auto">
-              <summary
-                data-subtitle-tool-ffmpeg-status={
-                  ffmpegUnavailable ? "unavailable" : "available"
-                }
-                title={ffmpegStatusTitle || undefined}
-                className={`flex cursor-pointer list-none items-center gap-1.5 rounded-[var(--control-radius-sm)] px-1.5 py-1 text-[length:var(--font-size-caption)] outline-none transition-colors hover:bg-[var(--detail-secondary-action-hover-bg)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)] [&::-webkit-details-marker]:hidden ${
-                  ffmpegUnavailable
-                    ? "text-[var(--status-error-text)]"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {ffmpegUnavailable ? (
-                  <AlertCircle className="size-3.5 shrink-0" />
-                ) : (
-                  <CircleCheck className="size-3.5 shrink-0 text-[var(--brand-500)]" />
-                )}
-                <span className="min-w-0 truncate">{ffmpegStatusShortLabel}</span>
-              </summary>
-              <div className="absolute bottom-full left-0 z-20 mb-2 grid w-full min-w-[176px] gap-2 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--app-bg)] p-2 shadow-lg">
-                <label className="text-[length:var(--font-size-caption)] text-muted-foreground">
-                  FFmpeg 路径
-                </label>
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <input
-                    value={ffmpegPath}
-                    onChange={(event) => onChangeFfmpegPath(event.target.value)}
-                    onBlur={(event) => void onSaveFfmpegPath(event.target.value)}
-                    spellCheck={false}
-                    aria-label="FFmpeg 路径"
-                    className="h-7 min-w-0 flex-1 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2 font-mono text-[11px] text-foreground outline-none focus:border-[var(--control-accent)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
-                  />
-                  <ToolbarIconButton
-                    darkMode={darkMode}
-                    onClick={() => void onChooseFfmpegBinary()}
-                    aria-label="选择 FFmpeg 可执行文件"
-                    title="选择 FFmpeg 可执行文件"
-                    className="h-7 w-7 shrink-0"
+            <div className="mt-2 min-w-0 shrink-0 md:mt-auto">
+              <PopoverPrimitive.Root>
+                <PopoverPrimitive.Trigger asChild>
+                <button
+                  type="button"
+                  data-subtitle-tool-ffmpeg-status={
+                    ffmpegUnavailable ? "unavailable" : "available"
+                  }
+                  title={ffmpegStatusTitle || undefined}
+                  className={`flex cursor-pointer list-none items-center gap-1.5 rounded-[var(--control-radius-sm)] px-1.5 py-1 text-[length:var(--font-size-caption)] outline-none transition-colors hover:bg-[var(--detail-secondary-action-hover-bg)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)] [&::-webkit-details-marker]:hidden ${
+                    ffmpegUnavailable
+                      ? "text-[var(--status-error-text)]"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {ffmpegUnavailable ? (
+                    <AlertCircle className="size-3.5 shrink-0" />
+                  ) : (
+                    <CircleCheck className="size-3.5 shrink-0 text-[var(--brand-500)]" />
+                  )}
+                  <span className="min-w-0 truncate">
+                    {ffmpegStatusShortLabel}
+                  </span>
+                </button>
+                </PopoverPrimitive.Trigger>
+                <PopoverPrimitive.Portal>
+                  <PopoverPrimitive.Content
+                  side="top"
+                  align="start"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-50 grid w-[var(--radix-popover-trigger-width)] min-w-[176px] gap-2 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--app-bg)] p-2 shadow-lg outline-none"
                   >
-                    <FolderOpen className="size-3.5" />
-                  </ToolbarIconButton>
-                </div>
-              </div>
-            </details>
+                  <label className="text-[length:var(--font-size-caption)] text-muted-foreground">
+                    FFmpeg 路径
+                  </label>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <input
+                      value={ffmpegPath}
+                      onChange={(event) => onChangeFfmpegPath(event.target.value)}
+                      onBlur={(event) => void onSaveFfmpegPath(event.target.value)}
+                      spellCheck={false}
+                      aria-label="FFmpeg 路径"
+                      className="h-7 min-w-0 flex-1 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2 font-mono text-[11px] text-foreground outline-none focus:border-[var(--control-accent)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
+                    />
+                    <ToolbarIconButton
+                      darkMode={darkMode}
+                      onClick={() => void onChooseFfmpegBinary()}
+                      aria-label="选择 FFmpeg 可执行文件"
+                      title="选择 FFmpeg 可执行文件"
+                      className="h-7 w-7 shrink-0"
+                    >
+                      <FolderOpen className="size-3.5" />
+                    </ToolbarIconButton>
+                  </div>
+                  </PopoverPrimitive.Content>
+                </PopoverPrimitive.Portal>
+              </PopoverPrimitive.Root>
+            </div>
           </>
         }
       >
@@ -868,7 +809,10 @@ export const SubtitleMuxPageContent = ({
           hidden={activeTool !== "generate"}
           className="min-w-0"
         >
-          <div className="mx-auto grid w-full max-w-[900px] gap-4">
+          <div
+            data-subtitle-generation-workflow="true"
+            className="relative mx-auto grid w-full max-w-[900px] gap-0 px-1"
+          >
             <div className="flex justify-end gap-2">
               <ToolbarButton
                 darkMode={darkMode}
@@ -891,23 +835,22 @@ export const SubtitleMuxPageContent = ({
                 darkMode={darkMode}
                 onClick={() => void onGenerateSubtitle()}
                 className="subtitle-accent-action shrink-0"
-                disabled={
-                  !canGenerateSubtitle ||
-                  isGenerating ||
-                  (transcriptionEngine === "faster-whisper"
-                    ? fasterWhisperUnavailable
-                    : whisperUnavailable)
-                }
+                disabled={!canGenerateSubtitle || isGenerating || fasterWhisperUnavailable}
               >
                 {isGenerating && transcriptionProgressMessage
                   ? "正在生成字幕"
                   : "生成字幕"}
               </ToolbarButton>
             </div>
-            <div
-              data-subtitle-generate-setup-row
-              className="grid gap-4 md:grid-cols-2 md:items-stretch"
+            <WorkflowStep
+              workflow="generation"
+              id="file"
+              number="01"
+              title="选择视频"
+              state={generationStepStates.file}
+              isLast={false}
             >
+              <div className="min-w-0">
               <FilePathPicker
                 id="subtitle-generate-video"
                 darkMode={darkMode}
@@ -933,49 +876,48 @@ export const SubtitleMuxPageContent = ({
                   onDropGenerationVideoPaths([videoPath]);
                 }}
               />
+              </div>
+            </WorkflowStep>
 
+            <WorkflowStep
+              workflow="generation"
+              id="settings"
+              number="02"
+              title="Faster Whisper"
+              titleAccessory={
+                <span
+                  data-subtitle-tool-faster-whisper-status={fasterWhisperStatusState}
+                  className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] ${
+                    fasterWhisperStatusState === "available"
+                      ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+                      : fasterWhisperStatusState === "unavailable"
+                        ? "bg-[var(--status-error-bg)] text-[var(--status-error-text)]"
+                        : "bg-[var(--control-fill)] text-muted-foreground"
+                  }`}
+                >
+                  {fasterWhisperStatusState === "available" ? (
+                    <CircleCheck className="size-3" aria-label="可用" />
+                  ) : fasterWhisperStatusState === "unavailable" ? (
+                    <CircleX className="size-3" aria-label="不可用" />
+                  ) : (
+                    <LoaderCircle className="size-3" aria-label="检测中" />
+                  )}
+                  {fasterWhisperStatusState === "available"
+                    ? "就绪"
+                    : fasterWhisperStatusState === "unavailable"
+                      ? "不可用"
+                      : "检测中"}
+                </span>
+              }
+              state={generationStepStates.settings}
+              isLast={false}
+            >
               <div
                 data-subtitle-generate-whisper-card="compact"
                 data-subtitle-transcription-engine="faster-whisper"
-                className="grid min-w-0 content-start gap-2 pt-1"
+                className="grid min-w-0 content-start gap-2"
               >
-                {transcriptionEngine === "faster-whisper" ? (
-                  <>
-                    <div className="grid min-w-0 gap-3 border-l-2 border-[var(--subtitle-accent-border)] pl-3">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Captions className="size-4 shrink-0 text-[var(--subtitle-accent-muted)]" />
-                        <span className="truncate text-[length:var(--font-size-control)] font-medium text-foreground">
-                          Faster Whisper
-                        </span>
-                        <span
-                          data-subtitle-tool-faster-whisper-status={
-                            fasterWhisperStatusState
-                          }
-                          className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] ${
-                            fasterWhisperStatusState === "available"
-                              ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
-                              : fasterWhisperStatusState === "unavailable"
-                                ? "bg-[var(--status-error-bg)] text-[var(--status-error-text)]"
-                                : "bg-[var(--control-fill)] text-muted-foreground"
-                          }`}
-                        >
-                          {fasterWhisperStatusState === "available" ? (
-                            <CircleCheck className="size-3" aria-label="可用" />
-                          ) : fasterWhisperStatusState === "unavailable" ? (
-                            <CircleX className="size-3" aria-label="不可用" />
-                          ) : (
-                            <LoaderCircle
-                              className="size-3"
-                              aria-label="检测中"
-                            />
-                          )}
-                          {fasterWhisperStatusState === "available"
-                            ? "就绪"
-                            : fasterWhisperStatusState === "unavailable"
-                              ? "不可用"
-                              : "检测中"}
-                        </span>
-                      </div>
+                <div className="grid min-w-0 gap-3 border-l-2 border-[var(--subtitle-accent-border)] pl-3">
                       {fasterWhisperStatus?.error ? (
                         <div
                           className="truncate text-[length:var(--font-size-caption)] text-[var(--status-error-text)]"
@@ -1066,177 +1008,7 @@ export const SubtitleMuxPageContent = ({
                         </div>
                       </div>
                     </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-[length:var(--font-size-caption)] text-muted-foreground">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Captions className="size-4 shrink-0" />
-                        <span className="truncate">whisper.cpp</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div
-                          data-subtitle-tool-whisper-status={whisperStatusState}
-                          className={`shrink-0 ${
-                            whisperStatusState === "available"
-                              ? "text-[var(--status-success-text)]"
-                              : whisperStatusState === "unavailable"
-                                ? "text-[var(--status-error-text)]"
-                                : "text-muted-foreground"
-                          }`}
-                        >
-                          {whisperStatusState === "available" ? (
-                            <CircleCheck className="size-4" aria-label="可用" />
-                          ) : whisperStatusState === "unavailable" ? (
-                            <CircleX className="size-4" aria-label="不可用" />
-                          ) : (
-                            <LoaderCircle
-                              className="size-4"
-                              aria-label="检测中"
-                            />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {whisperStatus?.error ? (
-                      <div
-                        className="truncate text-[length:var(--font-size-caption)] text-[var(--status-error-text)]"
-                        title={whisperStatus.error}
-                      >
-                        {whisperStatus.error}
-                      </div>
-                    ) : null}
-                    <div className="grid min-w-0 gap-1 text-[length:var(--font-size-caption)]">
-                      <div className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)_auto] items-center gap-2">
-                        <span className="whitespace-nowrap text-muted-foreground">
-                          命令行
-                        </span>
-                        <input
-                          value={whisperBinaryPath}
-                          onChange={(event) =>
-                            onChangeWhisperBinaryPath(event.target.value)
-                          }
-                          onBlur={(event) =>
-                            void onSaveWhisperBinaryPath(event.target.value)
-                          }
-                          disabled={isGenerating}
-                          spellCheck={false}
-                          aria-label="whisper-cli 路径"
-                          className="h-7 min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2 font-mono text-[11px] text-foreground outline-none focus:border-[var(--control-accent)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
-                        />
-                        <ToolbarIconButton
-                          darkMode={darkMode}
-                          onClick={() => void onChooseWhisperBinary()}
-                          disabled={isGenerating}
-                          aria-label="选择 whisper-cli 可执行文件"
-                          title="选择 whisper-cli 可执行文件"
-                          className="h-7 w-7"
-                        >
-                          <FolderOpen className="size-3.5" />
-                        </ToolbarIconButton>
-                      </div>
-                      <div className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)_auto] items-center gap-2">
-                        <span className="whitespace-nowrap text-muted-foreground">
-                          模型
-                        </span>
-                        <span
-                          data-subtitle-tool-whisper-model-path
-                          title={whisperModelPath ?? undefined}
-                          className={`truncate ${
-                            whisperModelPath
-                              ? "text-foreground"
-                              : "text-muted-foreground"
-                          }`}
-                        >
-                          {whisperModelLabel ?? "未选择"}
-                        </span>
-                        <ToolbarIconButton
-                          data-subtitle-tool-whisper-model-action
-                          darkMode={darkMode}
-                          onClick={() => void onChooseWhisperModel()}
-                          disabled={isGenerating}
-                          aria-label="选择模型"
-                          title="选择模型"
-                          className="h-7 w-7"
-                        >
-                          <FolderOpen className="size-3.5" />
-                        </ToolbarIconButton>
-                      </div>
-                      {isAppleSilicon ? (
-                        <div
-                          data-subtitle-tool-whisper-coreml-status
-                          title={whisperCoreMlTitle || undefined}
-                          className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)_auto] items-center gap-2"
-                        >
-                          <span
-                            data-subtitle-tool-whisper-coreml-label
-                            className="whitespace-nowrap text-muted-foreground"
-                          >
-                            Apple Silicon 加速
-                          </span>
-                          <span
-                            className={`flex min-w-0 items-center gap-1.5 truncate ${
-                              whisperCoreMlStatus?.available
-                                ? "text-[var(--status-success-text)]"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                            {whisperCoreMlStatus?.available ? (
-                              <CircleCheck className="size-3.5 shrink-0" />
-                            ) : whisperCoreMlStatus ? (
-                              <CircleX className="size-3.5 shrink-0" />
-                            ) : (
-                              <LoaderCircle className="size-3.5 shrink-0" />
-                            )}
-                            <span className="truncate">
-                              {whisperCoreMlShortLabel}
-                            </span>
-                          </span>
-                          <ToolbarIconButton
-                            data-subtitle-tool-whisper-coreml-action
-                            darkMode={darkMode}
-                            onClick={() => void onChooseWhisperCoreMlPackage()}
-                            disabled={isGenerating || !whisperModelPath}
-                            aria-label="安装 Core ML 加速包"
-                            title="安装 Core ML 加速包"
-                            className="h-7 w-7"
-                          >
-                            <Archive className="size-3.5" />
-                          </ToolbarIconButton>
-                        </div>
-                      ) : null}
-                    </div>
-                    <label className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] items-center gap-2 text-[length:var(--font-size-caption)] text-muted-foreground">
-                      <span className="whitespace-nowrap">语言</span>
-                      <Select
-                        value={generationLanguage}
-                        onValueChange={onChangeGenerationLanguage}
-                        disabled={isGenerating}
-                      >
-                        <SelectTrigger
-                          data-subtitle-generation-language-select
-                          className="h-[var(--control-height-md)] w-full max-w-[160px] min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2.5 text-[length:var(--font-size-control)] text-foreground outline-none transition-colors placeholder:text-[var(--form-field-placeholder)] focus:border-[var(--control-accent)] focus:bg-[var(--form-field-focus-bg)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
-                        >
-                          <span data-slot="select-value" className="truncate">
-                            {subtitleGenerationLanguageOptions.find(
-                              (option) => option.value === generationLanguage,
-                            )?.label ?? "自动"}
-                          </span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {subtitleGenerationLanguageOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </label>
-                  </>
-                )}
               </div>
-            </div>
-
             {ffmpegUnavailable ? (
               <FfmpegInstallGuide
                 darkMode={darkMode}
@@ -1244,19 +1016,24 @@ export const SubtitleMuxPageContent = ({
               />
             ) : null}
 
-            {(transcriptionEngine === "faster-whisper"
-              ? fasterWhisperUnavailable
-              : whisperUnavailable) ? (
-              <WhisperInstallGuide
-                engine={transcriptionEngine}
-                onRefresh={
-                  transcriptionEngine === "faster-whisper"
-                    ? onRefreshFasterWhisperStatus
-                    : onRefreshWhisperStatus
-                }
+            {fasterWhisperUnavailable ? (
+              <FasterWhisperInstallGuide
+                onRefresh={onRefreshFasterWhisperStatus}
                 darkMode={darkMode}
               />
             ) : null}
+
+            </WorkflowStep>
+
+            <WorkflowStep
+              workflow="generation"
+              id="progress"
+              number="03"
+              title="截取与生成"
+              state={generationStepStates.progress}
+              isLast
+            >
+            <div className="grid gap-2.5">
 
             <div className="grid gap-2.5">
               {generationVideoPreviewUrl && !isPreviewUnavailable ? (
@@ -1410,6 +1187,8 @@ export const SubtitleMuxPageContent = ({
               </StatusMessage>
             </div>
           ) : null}
+            </WorkflowStep>
+          </div>
         </section>
 
         <section
@@ -1461,11 +1240,11 @@ export const SubtitleMuxPageContent = ({
                 </ToolbarButton>
               )}
             </div>
-            <TranslationWorkflowStep
+            <WorkflowStep
               id="file"
               number="01"
               title="选择字幕"
-              state={translationFileStepState}
+              state={translationStepStates.file}
               isLast={false}
             >
               <div
@@ -1513,13 +1292,13 @@ export const SubtitleMuxPageContent = ({
                   onDropPaths={onDropSubtitleTranslationPaths}
                 />
               </div>
-            </TranslationWorkflowStep>
+            </WorkflowStep>
 
-            <TranslationWorkflowStep
+            <WorkflowStep
               id="settings"
               number="02"
               title="翻译设置"
-              state={translationSettingsStepState}
+              state={translationStepStates.settings}
               isLast={false}
             >
               <div className="grid gap-3 sm:grid-cols-[160px_160px]">
@@ -1574,13 +1353,13 @@ export const SubtitleMuxPageContent = ({
                   />
                 </label>
               </div>
-            </TranslationWorkflowStep>
+            </WorkflowStep>
 
-            <TranslationWorkflowStep
+            <WorkflowStep
               id="progress"
               number="03"
               title="翻译进度"
-              state={translationProgressStepState}
+              state={translationStepStates.progress}
               isLast
             >
               <div className="grid min-w-0 gap-3">
@@ -1668,7 +1447,7 @@ export const SubtitleMuxPageContent = ({
                   </div>
                 ) : null}
               </div>
-            </TranslationWorkflowStep>
+            </WorkflowStep>
           </div>
           {subtitleTranslationConnectionStatus === "unavailable" ? (
             <div className="mx-auto mt-7 w-full max-w-[900px] px-1 text-[length:var(--font-size-caption)]">
