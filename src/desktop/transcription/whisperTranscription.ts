@@ -32,16 +32,12 @@ export type WhisperTranscriptionProgress = (
 export interface WhisperTranscriptionRequest {
   videoPath: string;
   outputPath: string;
-  whisperPath: string;
   modelPath: string;
   language: string;
   startMs?: number;
   endMs?: number;
-  engine?: SubtitleTranscriptionEngine;
   fasterWhisperPythonPath?: string;
 }
-
-export type SubtitleTranscriptionEngine = "whisper.cpp" | "faster-whisper";
 
 export interface WhisperTranscriptionResult {
   outputPath: string;
@@ -369,12 +365,6 @@ const readTranscriptionProgress = async (
   }
 };
 
-const readWhisperProgress = async (
-  stream: ReadableStream<Uint8Array> | null,
-  onProgress?: (progress: WhisperTranscriptionProgress) => void
-): Promise<void> =>
-  readTranscriptionProgress(stream, onProgress, parseWhisperProgressText);
-
 const readFasterWhisperProgress = async (
   stream: ReadableStream<Uint8Array> | null,
   onProgress?: (progress: WhisperTranscriptionProgress) => void
@@ -572,7 +562,6 @@ export const transcribeVideoSubtitle = async (
   const readFile = deps.readFile ?? defaultReadFile;
   const writeFile = deps.writeFile ?? defaultWriteFile;
   const language = input.language.trim() || "auto";
-  const engine = input.engine ?? "whisper.cpp";
   const range =
     typeof input.startMs === "number" && typeof input.endMs === "number"
       ? { startMs: input.startMs, endMs: input.endMs }
@@ -642,31 +631,19 @@ export const transcribeVideoSubtitle = async (
         phase: "transcribing",
         message: segmentLabel ? `正在识别${segmentLabel}字幕` : "正在识别字幕",
       });
-      const whisperCommand =
-        engine === "faster-whisper"
-          ? buildFasterWhisperCommand({
-              pythonPath: resolveExecutable(
-                input.fasterWhisperPythonPath?.trim() || "python3"
-              ),
-              modelPath: input.modelPath,
-              audioPath,
-              outputPath: `${segmentOutputBasePath}.srt`,
-              language,
-            })
-          : buildWhisperCommand({
-              whisperPath: resolveExecutable(input.whisperPath),
-              modelPath: input.modelPath,
-              audioPath,
-              outputBasePath: segmentOutputBasePath,
-              language,
-            });
+      const whisperCommand = buildFasterWhisperCommand({
+        pythonPath: resolveExecutable(
+          input.fasterWhisperPythonPath?.trim() || "python3"
+        ),
+        modelPath: input.modelPath,
+        audioPath,
+        outputPath: `${segmentOutputBasePath}.srt`,
+        language,
+      });
       deps.onProgress?.({
         phase: "command",
         command: formatCommandForDisplay(whisperCommand),
-        message:
-          engine === "faster-whisper"
-            ? "正在执行 Faster Whisper 识别命令"
-            : "正在执行 whisper.cpp 识别命令",
+        message: "正在执行 Faster Whisper 识别命令",
       });
       const onSegmentProgress = (progress: WhisperTranscriptionProgress) => {
         if (
@@ -689,10 +666,7 @@ export const transcribeVideoSubtitle = async (
       };
       await runCommand(whisperCommand, {
         spawn,
-        onStdout: (stream) =>
-          engine === "faster-whisper"
-            ? readFasterWhisperProgress(stream, onSegmentProgress)
-            : readWhisperProgress(stream, onSegmentProgress),
+        onStdout: (stream) => readFasterWhisperProgress(stream, onSegmentProgress),
         onStderrProgress: onSegmentProgress,
         abortSignal: deps.abortSignal,
       });

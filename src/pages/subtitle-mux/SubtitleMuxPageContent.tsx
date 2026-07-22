@@ -80,7 +80,6 @@ const subtitleGenerationLanguageOptions = [
 ];
 
 const subtitleTranscriptionEngineOptions = [
-  { value: "whisper.cpp", label: "whisper.cpp" },
   { value: "faster-whisper", label: "Faster Whisper（海南鸡）" },
 ] as const;
 

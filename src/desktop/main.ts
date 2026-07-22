@@ -7,8 +7,6 @@ import {
   chooseFasterWhisperPythonFile,
   chooseCliExecutableFile,
   chooseSubtitleMuxFile,
-  chooseWhisperCoreMlPackageFile,
-  chooseWhisperModelFile,
 } from "./fileDialog";
 import { openFilePath, revealFilePath } from "./fileService";
 import { requestRaw } from "./httpRequest";
@@ -24,14 +22,9 @@ import { createCompatibleVideoPreview } from "./compatibleVideoPreview";
 import { createGoogleTranslateTextService } from "./googleTranslate";
 import { getFasterWhisperStatus } from "./transcription/fasterWhisperStatus";
 import {
-  getWhisperCoreMlStatus,
-  installWhisperCoreMlPackage,
-} from "./transcription/whisperCoreMl";
-import {
   getAvailableWhisperOutputPathForRanges,
   probeWhisperVideoDurationMs,
   transcribeVideoSubtitleRanges,
-  type SubtitleTranscriptionEngine,
 } from "./transcription/whisperTranscription";
 
 let mainWindow: BrowserWindow | null = null;
@@ -60,11 +53,6 @@ const getCliStatus = async (executable: string, args: string[]) => {
   }
 };
 
-const getWhisperConfig = async () => ({
-  whisperPath: (await configGet("whisper_binary_path"))?.trim() || "whisper-cli",
-  modelPath: (await configGet("whisper_model_path"))?.trim() || "",
-});
-
 const getFfmpegPath = async () =>
   (await configGet("ffmpeg_binary_path"))?.trim() || "ffmpeg";
 
@@ -72,23 +60,10 @@ const resolveWithConfiguredFfmpeg = (ffmpegPath: string) =>
   (executable: string) =>
     resolveCliExecutable(executable === "ffmpeg" || executable === "ffprobe" ? ffmpegPath.replace(/ffmpeg$/, executable) : executable);
 
-const getTranscriptionEngine = async (): Promise<SubtitleTranscriptionEngine> =>
-  (await configGet("subtitle_transcription_engine")) === "faster-whisper"
-    ? "faster-whisper"
-    : "whisper.cpp";
-
 const getFasterWhisperConfig = async () => ({
   pythonPath: (await configGet("faster_whisper_python_path"))?.trim() || "python3",
   modelPath: (await configGet("faster_whisper_model_path"))?.trim() || "",
 });
-
-const getWhisperStatus = async () => {
-  const { whisperPath, modelPath } = await getWhisperConfig();
-  const status = await getCliStatus(whisperPath, ["--help"]);
-  return !status.available || modelPath
-    ? status
-    : { ...status, available: false, error: "未配置 whisper 模型路径" };
-};
 
 const rpc = BrowserView.defineRPC<DesktopRPC>({
   maxRequestTime: DESKTOP_RPC_MAX_REQUEST_TIME_MS,
@@ -103,12 +78,9 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
       selectSubtitleMuxVideoFile: () => chooseSubtitleMuxFile({ openFileDialog: Utils.openFileDialog, allowedFileTypes: "mp4,mkv,avi,mov,wmv,m4v,ts,webm" }),
       selectSubtitleMuxSubtitleFile: () => chooseSubtitleMuxFile({ openFileDialog: Utils.openFileDialog, allowedFileTypes: "srt,ass,ssa" }),
       selectSubtitleTranslationFile: () => chooseSubtitleMuxFile({ openFileDialog: Utils.openFileDialog, allowedFileTypes: "srt" }),
-      selectWhisperModelFile: () => chooseWhisperModelFile({ openFileDialog: Utils.openFileDialog }),
       selectFfmpegBinaryFile: () => chooseCliExecutableFile({ openFileDialog: Utils.openFileDialog }),
-      selectWhisperBinaryFile: () => chooseCliExecutableFile({ openFileDialog: Utils.openFileDialog }),
       selectFasterWhisperPythonFile: () => chooseFasterWhisperPythonFile({ openFileDialog: Utils.openFileDialog }),
       selectFasterWhisperModelDirectory: () => chooseFasterWhisperModelDirectory({ openFileDialog: Utils.openFileDialog }),
-      selectWhisperCoreMlPackageFile: () => chooseWhisperCoreMlPackageFile({ openFileDialog: Utils.openFileDialog }),
       consumeLocalFileDrop: async () => ({
         paths: process.platform === "darwin" ? await fileDropBroker.consume() : [],
       }),
@@ -122,12 +94,8 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
         const result = await createCompatibleVideoPreview({ videoPath, cacheDirectory: previewCacheDirectory });
         return { url: previewServer.getPreviewUrl(result.previewPath), reused: result.reused };
       },
-      getWhisperCoreMlStatus: async ({ modelPath }) => getWhisperCoreMlStatus(modelPath ?? (await getWhisperConfig()).modelPath),
-      installWhisperCoreMlPackage: async ({ packagePath, modelPath }) => installWhisperCoreMlPackage({ packagePath, modelPath: modelPath ?? (await getWhisperConfig()).modelPath }),
       getRuntimeEnvironment: () => ({ platform: process.platform, arch: process.arch, isAppleSilicon: process.platform === "darwin" && process.arch === "arm64" }),
       getFfmpegStatus: async () => getCliStatus(await getFfmpegPath(), ["-version"]),
-      getWhisperStatus,
-      getSubtitleTranscriptionEngine: getTranscriptionEngine,
       getFasterWhisperStatus: async () => getFasterWhisperStatus(await getFasterWhisperConfig()),
       mergeVideoWithSubtitle: async ({ videoPath, subtitlePath, outputPath }) =>
         mergeVideoWithSubtitle(
@@ -140,15 +108,10 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
           { onProgress: (progress) => rpc.send.subtitleMuxProgress(progress) },
         ),
       transcribeVideoSubtitle: async ({ videoPath, ranges, durationMs, language }) => {
-        const engine = await getTranscriptionEngine();
-        const whisper = await getWhisperConfig();
         const faster = await getFasterWhisperConfig();
-        const modelPath = engine === "faster-whisper" ? faster.modelPath : whisper.modelPath;
-        if (!modelPath) throw new Error(engine === "faster-whisper" ? "请先选择 Faster Whisper CT2 模型目录" : "请先选择 whisper 模型文件");
-        if (engine === "faster-whisper") {
-          const status = await getFasterWhisperStatus(faster);
-          if (!status.available) throw new Error(status.error ?? "Faster Whisper 不可用");
-        }
+        if (!faster.modelPath) throw new Error("请先选择 Faster Whisper CT2 模型目录");
+        const status = await getFasterWhisperStatus(faster);
+        if (!status.available) throw new Error(status.error ?? "Faster Whisper 不可用");
         const controller = new AbortController();
         const ffmpegPath = await getFfmpegPath();
         activeTranscriptions.get(videoPath)?.abort();
@@ -157,11 +120,9 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
           return await transcribeVideoSubtitleRanges({
             videoPath,
             outputPath: getAvailableWhisperOutputPathForRanges(videoPath, existsSync, ranges, durationMs),
-            whisperPath: whisper.whisperPath,
-            modelPath,
+            modelPath: faster.modelPath,
             language,
             ranges,
-            engine,
             fasterWhisperPythonPath: faster.pythonPath,
           }, {
             abortSignal: controller.signal,

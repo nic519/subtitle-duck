@@ -111,7 +111,7 @@ export const SubtitleMuxPage = ({
   const [isAppleSilicon, setIsAppleSilicon] = useState(false);
   const [whisperModelPath, setWhisperModelPath] = useState<string | null>(null);
   const [transcriptionEngine, setTranscriptionEngine] =
-    useState<SubtitleTranscriptionEngine>("whisper.cpp");
+    useState<SubtitleTranscriptionEngine>("faster-whisper");
   const [fasterWhisperPythonPath, setFasterWhisperPythonPath] =
     useState<string | null>("python3");
   const [fasterWhisperModelPath, setFasterWhisperModelPath] =
@@ -312,13 +312,12 @@ export const SubtitleMuxPage = ({
 
   useEffect(() => {
     void Promise.all([
-      desktopApi.getSubtitleTranscriptionEngine(),
       desktopApi.configGet("faster_whisper_python_path"),
       desktopApi.configGet("faster_whisper_model_path"),
       desktopApi.getFasterWhisperStatus(),
     ])
-      .then(([engine, pythonPath, modelPath, status]) => {
-        setTranscriptionEngine(engine);
+      .then(([pythonPath, modelPath, status]) => {
+        setTranscriptionEngine("faster-whisper");
         setFasterWhisperPythonPath(pythonPath?.trim() || "python3");
         setFasterWhisperModelPath(modelPath?.trim() || null);
         setFasterWhisperStatus(status);
