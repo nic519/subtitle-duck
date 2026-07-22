@@ -92,7 +92,11 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
       }),
       getLocalVideoPreviewUrl: ({ videoPath }) => ({ url: previewServer.getPreviewUrl(videoPath) }),
       getCompatibleVideoPreviewUrl: async ({ videoPath }) => {
-        const result = await createCompatibleVideoPreview({ videoPath, cacheDirectory: previewCacheDirectory });
+        const ffmpegPath = await getFfmpegPath();
+        const result = await createCompatibleVideoPreview(
+          { videoPath, cacheDirectory: previewCacheDirectory },
+          { resolveExecutable: resolveWithConfiguredFfmpeg(ffmpegPath) }
+        );
         return { url: previewServer.getPreviewUrl(result.previewPath), reused: result.reused };
       },
       getRuntimeEnvironment: () => ({ platform: process.platform, arch: process.arch, isAppleSilicon: process.platform === "darwin" && process.arch === "arm64" }),
