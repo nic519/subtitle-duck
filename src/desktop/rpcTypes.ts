@@ -51,6 +51,7 @@ export type DesktopRPC = {
       transcribeVideoSubtitle: { params: { videoPath: string; ranges: WhisperTimeRange[]; durationMs: number; language: string }; response: WhisperMultiRangeTranscriptionResult };
       cancelTranscribeVideoSubtitle: { params: { videoPath: string }; response: void };
       translateSubtitleFile: { params: TranslateSubtitleFileInput; response: TranslateSubtitleFileResult };
+      testSubtitleTranslationConnection: { params: { proxyUrl?: string | null }; response: { available: boolean; error: string | null } };
       getFfmpegStatus: { params: void; response: CliStatus };
       getFasterWhisperStatus: { params: void; response: FasterWhisperStatus };
     };

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:desktop": "bun run build && bun run prepare:native-file-drop && electrobun dev",
+    "dev:desktop": "bun run prepare:native-file-drop && bun scripts/dev-desktop.ts",
     "prepare:native-file-drop": "bun scripts/build-native-file-drop-bridge.ts",
     "build": "tsc && vite build",
     "build:stable": "bun run build && bun run prepare:native-file-drop && electrobun build --env=stable",

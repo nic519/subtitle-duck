@@ -144,6 +144,18 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
           onProgress: (progress) => rpc.send.subtitleTranslationProgress({ subtitlePath: input.subtitlePath, ...progress }),
         });
       },
+      testSubtitleTranslationConnection: async ({ proxyUrl }) => {
+        const configuredProxyUrl = proxyUrl?.trim() || (await configGet("subtitle_translation_proxy_url"))?.trim();
+        try {
+          const translateText = createGoogleTranslateTextService(requestRaw, {
+            proxyConfig: configuredProxyUrl ? { enabled: true, url: configuredProxyUrl } : undefined,
+          });
+          await translateText({ text: "Connection test", targetLanguage: "zh-CN" });
+          return { available: true, error: null };
+        } catch (error) {
+          return { available: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      },
     },
     messages: {},
   },

@@ -127,6 +127,8 @@ export const desktopApi = {
     try { return await electrobun.rpc.request.translateSubtitleFile(input); }
     finally { translationListeners.delete(unsubscribe); }
   },
+  testSubtitleTranslationConnection: (proxyUrl?: string | null) =>
+    electrobun?.rpc.request.testSubtitleTranslationConnection({ proxyUrl }) ?? unavailable("测试翻译服务"),
   onWhisperTranscriptionProgress(listener: Listener<WhisperTranscriptionProgressEvent>) {
     transcriptionListeners.add(listener);
     return () => { transcriptionListeners.delete(listener); };

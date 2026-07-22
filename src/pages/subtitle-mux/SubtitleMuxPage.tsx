@@ -126,6 +126,8 @@ export const SubtitleMuxPage = ({
     setSubtitleTranslationBatchCharacters,
   ] = useState(1500);
   const [subtitleTranslationProxyUrl, setSubtitleTranslationProxyUrl] = useState("");
+  const [subtitleTranslationConnectionStatus, setSubtitleTranslationConnectionStatus] = useState<"idle" | "testing" | "available" | "unavailable">("idle");
+  const [subtitleTranslationConnectionError, setSubtitleTranslationConnectionError] = useState<string | null>(null);
   const [subtitleTranslationPath, setSubtitleTranslationPath] =
     useState<string | null>(null);
   const [translatedSubtitlePath, setTranslatedSubtitlePath] =
@@ -353,6 +355,28 @@ export const SubtitleMuxPage = ({
       setSubtitleTranslationProxyUrl(value?.trim() || "");
     });
   }, []);
+
+  useEffect(() => {
+    if (activeTool !== "translate") return;
+    let disposed = false;
+    setSubtitleTranslationConnectionStatus("testing");
+    setSubtitleTranslationConnectionError(null);
+    void desktopApi.testSubtitleTranslationConnection().then(
+      (result) => {
+        if (disposed) return;
+        setSubtitleTranslationConnectionStatus(result.available ? "available" : "unavailable");
+        setSubtitleTranslationConnectionError(result.error);
+      },
+      (error) => {
+        if (disposed) return;
+        setSubtitleTranslationConnectionStatus("unavailable");
+        setSubtitleTranslationConnectionError(error instanceof Error ? error.message : String(error));
+      },
+    );
+    return () => {
+      disposed = true;
+    };
+  }, [activeTool]);
 
   useEffect(() => {
     return desktopApi.onSubtitleMuxProgress((progress) => {
@@ -1116,6 +1140,19 @@ export const SubtitleMuxPage = ({
     void desktopApi.configSet("subtitle_translation_proxy_url", value.trim());
   };
 
+  const handleTestSubtitleTranslationConnection = async () => {
+    setSubtitleTranslationConnectionStatus("testing");
+    setSubtitleTranslationConnectionError(null);
+    try {
+      const result = await desktopApi.testSubtitleTranslationConnection(subtitleTranslationProxyUrl);
+      setSubtitleTranslationConnectionStatus(result.available ? "available" : "unavailable");
+      setSubtitleTranslationConnectionError(result.error);
+    } catch (error) {
+      setSubtitleTranslationConnectionStatus("unavailable");
+      setSubtitleTranslationConnectionError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const handleStart = async () => {
     if (!draft.videoPath || !draft.subtitlePath || !draft.outputPath) {
       setMergeStatus({ tone: "error", message: "请拖入 1 个视频文件和 1 个字幕文件" });
@@ -1206,6 +1243,8 @@ export const SubtitleMuxPage = ({
         subtitleTranslationOutputPath={subtitleTranslationOutputPath}
         subtitleTranslationBatchCharacters={subtitleTranslationBatchCharacters}
         subtitleTranslationProxyUrl={subtitleTranslationProxyUrl}
+        subtitleTranslationConnectionStatus={subtitleTranslationConnectionStatus}
+        subtitleTranslationConnectionError={subtitleTranslationConnectionError}
         subtitleTranslationProgressMessage={subtitleTranslationProgress.message}
         subtitleTranslationProgressPercent={subtitleTranslationProgress.percent}
         generationDurationMs={generationDurationMs}
@@ -1283,6 +1322,7 @@ export const SubtitleMuxPage = ({
           handleChangeSubtitleTranslationBatchCharacters
         }
         onChangeSubtitleTranslationProxyUrl={handleChangeSubtitleTranslationProxyUrl}
+        onTestSubtitleTranslationConnection={handleTestSubtitleTranslationConnection}
         onUseGenerationVideoPath={(path) => void loadGenerationVideo(path)}
         onUseSubtitleTranslationPath={useSubtitleTranslationPath}
         onDropGenerationVideoPaths={handleDropGenerationVideoPaths}

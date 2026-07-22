@@ -136,6 +136,8 @@ export type SubtitleMuxPageContentProps = {
   subtitleTranslationOutputPath: string | null;
   subtitleTranslationBatchCharacters: number;
   subtitleTranslationProxyUrl: string;
+  subtitleTranslationConnectionStatus: "idle" | "testing" | "available" | "unavailable";
+  subtitleTranslationConnectionError: string | null;
   subtitleTranslationProgressMessage: string | null;
   subtitleTranslationProgressPercent: number | null;
   isTranslatingSubtitle: boolean;
@@ -165,6 +167,7 @@ export type SubtitleMuxPageContentProps = {
   onChangeSubtitleTranslationTargetLanguage: (value: string) => void;
   onChangeSubtitleTranslationBatchCharacters: (value: number) => void;
   onChangeSubtitleTranslationProxyUrl: (value: string) => void;
+  onTestSubtitleTranslationConnection: () => void;
   onUseGenerationVideoPath: (path: string) => void;
   onUseSubtitleTranslationPath: (path: string) => void;
   onDropGenerationVideoPaths: (paths: string[]) => void;
@@ -461,6 +464,8 @@ export const SubtitleMuxPageContent = ({
   subtitleTranslationOutputPath,
   subtitleTranslationBatchCharacters,
   subtitleTranslationProxyUrl,
+  subtitleTranslationConnectionStatus,
+  subtitleTranslationConnectionError,
   subtitleTranslationProgressMessage,
   subtitleTranslationProgressPercent,
   isTranslatingSubtitle,
@@ -490,6 +495,7 @@ export const SubtitleMuxPageContent = ({
   onChangeSubtitleTranslationTargetLanguage,
   onChangeSubtitleTranslationBatchCharacters,
   onChangeSubtitleTranslationProxyUrl,
+  onTestSubtitleTranslationConnection,
   onUseGenerationVideoPath,
   onUseSubtitleTranslationPath,
   onDropGenerationVideoPaths,
@@ -1472,38 +1478,6 @@ export const SubtitleMuxPageContent = ({
               </div>
             </TranslationWorkflowStep>
 
-            <div className="ml-11 border-l-2 border-[var(--subtitle-accent-border)] pl-3 text-[length:var(--font-size-caption)] text-muted-foreground">
-              <div className="flex items-center gap-2 font-medium text-foreground">
-                <Languages className="size-4 text-[var(--subtitle-accent-muted)]" />
-                在线翻译服务
-              </div>
-              <p className="mt-1.5 leading-5">
-                字幕翻译使用 Google 翻译在线服务，无需安装 FFmpeg、Python 或其他本地插件。请保持网络可用；翻译内容会发送至第三方服务。
-              </p>
-              <details className="mt-2">
-                <summary className="w-fit cursor-pointer select-none text-foreground/80 transition-colors hover:text-foreground">
-                  网络设置
-                </summary>
-                <label className="mt-2 grid max-w-sm gap-1.5">
-                  <span>代理地址（可选）</span>
-                  <input
-                    data-subtitle-translation-proxy-input="true"
-                    type="url"
-                    inputMode="url"
-                    autoComplete="off"
-                    value={subtitleTranslationProxyUrl}
-                    placeholder="http://127.0.0.1:7890"
-                    disabled={isTranslatingSubtitle}
-                    onChange={(event) =>
-                      onChangeSubtitleTranslationProxyUrl(event.target.value)
-                    }
-                    className="h-[var(--control-height-md)] min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2.5 text-[length:var(--font-size-control)] text-foreground outline-none transition-colors placeholder:text-[var(--form-field-placeholder)] focus:border-[var(--control-accent)] focus:bg-[var(--form-field-focus-bg)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
-                  />
-                  <span>留空则直连。</span>
-                </label>
-              </details>
-            </div>
-
             <TranslationWorkflowStep
               id="progress"
               number="03"
@@ -1586,6 +1560,51 @@ export const SubtitleMuxPageContent = ({
                 ) : null}
               </div>
             </TranslationWorkflowStep>
+          </div>
+          <div className="mx-auto mt-6 grid w-full max-w-[900px] gap-3 border-t border-[var(--result-divider)] px-1 pt-4 text-[length:var(--font-size-caption)]">
+            <div className="flex items-center gap-2">
+              {subtitleTranslationConnectionStatus === "testing" ? (
+                <LoaderCircle className="size-3.5 animate-spin text-[var(--subtitle-accent-muted)]" />
+              ) : subtitleTranslationConnectionStatus === "available" ? (
+                <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+              ) : subtitleTranslationConnectionStatus === "unavailable" ? (
+                <CircleX className="size-3.5 text-destructive" />
+              ) : null}
+              <span className={subtitleTranslationConnectionStatus === "unavailable" ? "text-destructive" : "text-muted-foreground"}>
+                {subtitleTranslationConnectionStatus === "testing"
+                  ? "正在检查翻译连接"
+                  : subtitleTranslationConnectionStatus === "available"
+                    ? "翻译连接正常"
+                    : subtitleTranslationConnectionStatus === "unavailable"
+                      ? "连接需要代理或重试"
+                      : "尚未检查翻译连接"}
+              </span>
+              {subtitleTranslationConnectionError ? <span className="sr-only">{subtitleTranslationConnectionError}</span> : null}
+            </div>
+            <label className="flex min-w-0 items-center gap-3 text-muted-foreground">
+              <span className="shrink-0">代理地址</span>
+              <input
+                data-subtitle-translation-proxy-input="true"
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                value={subtitleTranslationProxyUrl}
+                placeholder="http://127.0.0.1:7890"
+                disabled={isTranslatingSubtitle}
+                onChange={(event) => onChangeSubtitleTranslationProxyUrl(event.target.value)}
+                className="h-[var(--control-height-md)] min-w-0 max-w-md flex-1 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2.5 text-[length:var(--font-size-control)] text-foreground outline-none transition-colors placeholder:text-[var(--form-field-placeholder)] focus:border-[var(--control-accent)] focus:bg-[var(--form-field-focus-bg)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
+              />
+              <span className="hidden sm:inline">留空直连</span>
+            </label>
+            <div className="flex justify-end">
+              <ToolbarButton
+                darkMode={darkMode}
+                onClick={() => void onTestSubtitleTranslationConnection()}
+                disabled={subtitleTranslationConnectionStatus === "testing" || isTranslatingSubtitle}
+              >
+                {subtitleTranslationConnectionStatus === "testing" ? "正在检查网络" : "重新测试"}
+              </ToolbarButton>
+            </div>
           </div>
         </section>
 

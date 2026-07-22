@@ -25,6 +25,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 1420,
+      strictPort: true,
       watch: {
         ignored: ["**/build/**", "**/dist/**"],
       },
