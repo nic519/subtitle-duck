@@ -6,7 +6,7 @@ import { resolveCliExecutable } from "./cliExecutable";
 
 type SpawnProcess = ReturnType<typeof Bun.spawn>;
 
-const compatibleVideoPreviewProfile = "h264-aac-480p-v2";
+const compatibleVideoPreviewProfile = "copy-or-h264-aac-480p-v3";
 
 export type CompatibleVideoPreviewRequest = {
   videoPath: string;
@@ -32,6 +32,33 @@ export const getCompatibleVideoPreviewCachePath = (
     .slice(0, 48) || "video";
   return join(cacheDirectory, `${sourceStem}.${digest}.preview.mp4`);
 };
+
+export const buildLosslessCompatibleVideoPreviewCommand = ({
+  ffmpegPath,
+  videoPath,
+  outputPath,
+}: {
+  ffmpegPath: string;
+  videoPath: string;
+  outputPath: string;
+}): string[] => [
+  ffmpegPath,
+  "-nostdin",
+  "-y",
+  "-loglevel",
+  "error",
+  "-i",
+  videoPath,
+  "-map",
+  "0:v:0",
+  "-map",
+  "0:a:0?",
+  "-c",
+  "copy",
+  "-movflags",
+  "+faststart",
+  outputPath,
+];
 
 export const buildCompatibleVideoPreviewCommand = ({
   ffmpegPath,
@@ -74,6 +101,79 @@ export const buildCompatibleVideoPreviewCommand = ({
   outputPath,
 ];
 
+const runFfmpeg = async ({
+  command,
+  spawn,
+}: {
+  command: string[];
+  spawn: (command: string[], options: Parameters<typeof Bun.spawn>[1]) => SpawnProcess;
+}): Promise<{ exitCode: number; stderrText: string; stdoutText: string }> => {
+  const process = spawn(command, { stdout: "pipe", stderr: "pipe" });
+  const [exitCode, stderrText, stdoutText] = await Promise.all([
+    process.exited,
+    new Response(process.stderr as ReadableStream<Uint8Array>).text(),
+    new Response(process.stdout as ReadableStream<Uint8Array>).text(),
+  ]);
+  return { exitCode, stderrText, stdoutText };
+};
+
+type MediaStream = {
+  codec_type?: string;
+  codec_name?: string;
+  pix_fmt?: string;
+};
+
+/**
+ * MP4 accepts many codecs, but the embedded Chromium player does not decode
+ * all of them. Only use the lossless path for the conservative H.264 8-bit
+ * 4:2:0 + AAC combination; everything else uses the reliable transcode path.
+ */
+const canUseLosslessMp4Preview = async ({
+  ffprobePath,
+  videoPath,
+  spawn,
+}: {
+  ffprobePath: string;
+  videoPath: string;
+  spawn: (command: string[], options: Parameters<typeof Bun.spawn>[1]) => SpawnProcess;
+}): Promise<boolean> => {
+  let result: Awaited<ReturnType<typeof runFfmpeg>>;
+  try {
+    result = await runFfmpeg({
+      command: [
+        ffprobePath,
+        "-v",
+        "error",
+        "-show_entries",
+        "stream=codec_type,codec_name,pix_fmt",
+        "-of",
+        "json",
+        videoPath,
+      ],
+      spawn,
+    });
+  } catch {
+    // ffprobe is normally bundled alongside ffmpeg. If it is unavailable,
+    // retain the previous reliable behavior instead of preventing previews.
+    return false;
+  }
+  if (result.exitCode !== 0) return false;
+
+  let streams: MediaStream[];
+  try {
+    streams = (JSON.parse(result.stdoutText) as { streams?: MediaStream[] }).streams ?? [];
+  } catch {
+    return false;
+  }
+  const video = streams.find((stream) => stream.codec_type === "video");
+  const audio = streams.find((stream) => stream.codec_type === "audio");
+  return (
+    video?.codec_name === "h264" &&
+    (video.pix_fmt === "yuv420p" || video.pix_fmt === "yuvj420p") &&
+    (!audio || audio.codec_name === "aac")
+  );
+};
+
 export const createCompatibleVideoPreview = async (
   input: CompatibleVideoPreviewRequest,
   deps: {
@@ -104,33 +204,53 @@ export const createCompatibleVideoPreview = async (
   if (checkExists(previewPath)) return { previewPath, reused: true };
 
   const temporaryPath = `${previewPath}.${crypto.randomUUID()}.tmp.mp4`;
-  let process: SpawnProcess;
+  const ffmpegPath = resolveExecutable("ffmpeg");
   try {
-    process = spawn(
-      buildCompatibleVideoPreviewCommand({
-        ffmpegPath: resolveExecutable("ffmpeg"),
+    // MKV often only differs by its container. For known browser-compatible
+    // H.264/AAC sources, re-mux to MP4 without touching the streams.
+    const useLosslessPreview = await canUseLosslessMp4Preview({
+      ffprobePath: resolveExecutable("ffprobe"),
+      videoPath: input.videoPath,
+      spawn,
+    });
+    if (useLosslessPreview) {
+      const losslessResult = await runFfmpeg({
+        command: buildLosslessCompatibleVideoPreviewCommand({
+          ffmpegPath,
+          videoPath: input.videoPath,
+          outputPath: temporaryPath,
+        }),
+        spawn,
+      });
+      if (losslessResult.exitCode === 0) {
+        await rename(temporaryPath, previewPath);
+        return { previewPath, reused: false };
+      }
+      await rm(temporaryPath, { force: true }).catch(() => undefined);
+    }
+
+    const fallbackResult = await runFfmpeg({
+      command: buildCompatibleVideoPreviewCommand({
+        ffmpegPath,
         videoPath: input.videoPath,
         outputPath: temporaryPath,
       }),
-      { stdout: "pipe", stderr: "pipe" }
-    );
+      spawn,
+    });
+
+    if (fallbackResult.exitCode !== 0) {
+      await rm(temporaryPath, { force: true }).catch(() => undefined);
+      throw new Error(
+        fallbackResult.stderrText.trim() || `ffmpeg exited with code ${fallbackResult.exitCode}`
+      );
+    }
   } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
     const message = error instanceof Error ? error.message : String(error);
     if (/ENOENT/i.test(message)) {
       throw new Error("未找到 ffmpeg，请先安装并确认它在 PATH 中");
     }
     throw new Error(message);
-  }
-
-  const [exitCode, stderrText] = await Promise.all([
-    process.exited,
-    new Response(process.stderr as ReadableStream<Uint8Array>).text(),
-    new Response(process.stdout as ReadableStream<Uint8Array>).text(),
-  ]);
-
-  if (exitCode !== 0) {
-    await rm(temporaryPath, { force: true }).catch(() => undefined);
-    throw new Error(stderrText.trim() || `ffmpeg exited with code ${exitCode}`);
   }
 
   await rename(temporaryPath, previewPath);
