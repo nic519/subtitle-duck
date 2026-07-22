@@ -108,6 +108,54 @@ export const buildCompatibleVideoPreviewCommand = ({
   outputPath,
 ];
 
+export const buildStreamingCompatibleVideoPreviewCommand = ({
+  ffmpegPath,
+  videoPath,
+  startMs,
+}: {
+  ffmpegPath: string;
+  videoPath: string;
+  startMs: number;
+}): string[] => [
+  ffmpegPath,
+  "-nostdin",
+  "-loglevel",
+  "error",
+  "-ss",
+  (Math.max(0, startMs) / 1000).toFixed(3),
+  "-i",
+  videoPath,
+  "-map",
+  "0:v:0",
+  "-map",
+  "0:a:0?",
+  "-vf",
+  "scale=-2:480",
+  "-c:v",
+  "libx264",
+  "-preset",
+  "ultrafast",
+  "-tune",
+  "zerolatency",
+  "-crf",
+  "28",
+  "-pix_fmt",
+  "yuv420p",
+  "-g",
+  "30",
+  "-c:a",
+  "aac",
+  "-b:a",
+  "128k",
+  "-ac",
+  "2",
+  "-f",
+  "mp4",
+  "-movflags",
+  "frag_keyframe+empty_moov+default_base_moof",
+  "pipe:1",
+];
+
 const runFfmpeg = async ({
   command,
   spawn,

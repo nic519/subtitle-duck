@@ -41,6 +41,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import type { SubtitleGenerationSegment } from "../../subtitle-mux/subtitleGenerationSegments";
+import { buildStreamingPreviewSeekUrl } from "../../subtitle-mux/streamingVideoPreview";
 import { SubtitleGenerationSegmentEditor } from "./SubtitleGenerationSegmentEditor";
 import { SubtitleMergeDropzone } from "./SubtitleMergeDropzone";
 
@@ -534,12 +535,14 @@ export const SubtitleMuxPageContent = ({
   const [isGenerationPreviewPlaying, setIsGenerationPreviewPlaying] =
     useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const generationPreviewOffsetMsRef = useRef(0);
   const [isPreviewUnavailable, setIsPreviewUnavailable] = useState(false);
   const [generationDropNotice, setGenerationDropNotice] = useState<
     string | null
   >(null);
 
   useEffect(() => {
+    generationPreviewOffsetMsRef.current = 0;
     setIsPreviewUnavailable(false);
   }, [generationVideoPreviewUrl]);
 
@@ -1264,7 +1267,8 @@ export const SubtitleMuxPageContent = ({
                   className="aspect-video mx-auto w-full max-w-[720px] rounded-[8px] bg-black"
                   onTimeUpdate={(event) =>
                     setGenerationPlayheadMs(
-                      Math.round(event.currentTarget.currentTime * 1000),
+                      generationPreviewOffsetMsRef.current +
+                        Math.round(event.currentTarget.currentTime * 1000),
                     )
                   }
                   onPlay={() => setIsGenerationPreviewPlaying(true)}
@@ -1274,7 +1278,7 @@ export const SubtitleMuxPageContent = ({
                 />
               ) : generationVideoPath ? (
                 <div className="rounded-[8px] bg-[var(--result-surface)] px-3 py-4 text-[length:var(--font-size-caption)] text-muted-foreground">
-                  当前格式无法直接预览。兼容预览生成完成后会自动切换；也可以继续手动输入开始和结束时间。
+                  当前格式无法直接预览，正在建立实时兼容预览；也可以继续手动输入开始和结束时间。
                 </div>
               ) : null}
 
@@ -1289,8 +1293,20 @@ export const SubtitleMuxPageContent = ({
                 onSelectSegment={onSelectGenerationSegment}
                 onRemoveSegment={onRemoveGenerationSegment}
                 onSeek={(timeMs) => {
-                  if (!videoRef.current) return;
-                  videoRef.current.currentTime = timeMs / 1000;
+                  const video = videoRef.current;
+                  if (!video) return;
+                  if (video.currentSrc.includes("/stream/")) {
+                    const wasPlaying = !video.paused;
+                    generationPreviewOffsetMsRef.current = timeMs;
+                    video.src = buildStreamingPreviewSeekUrl(
+                      generationVideoPreviewUrl ?? video.currentSrc,
+                      timeMs,
+                    );
+                    video.load();
+                    if (wasPlaying) void video.play().catch(() => undefined);
+                  } else {
+                    video.currentTime = timeMs / 1000;
+                  }
                   setGenerationPlayheadMs(timeMs);
                 }}
                 onTogglePlayback={() => {
@@ -1303,18 +1319,10 @@ export const SubtitleMuxPageContent = ({
                   }
                 }}
                 onSetStartFromPlayhead={() =>
-                  onSetGenerationRangeStart(
-                    videoRef.current
-                      ? Math.round(videoRef.current.currentTime * 1000)
-                      : null,
-                  )
+                  onSetGenerationRangeStart(generationPlayheadMs)
                 }
                 onSetEndFromPlayhead={() =>
-                  onSetGenerationRangeEnd(
-                    videoRef.current
-                      ? Math.round(videoRef.current.currentTime * 1000)
-                      : null,
-                  )
+                  onSetGenerationRangeEnd(generationPlayheadMs)
                 }
               />
           </div>

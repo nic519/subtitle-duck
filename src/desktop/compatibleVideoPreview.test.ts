@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildCompatibleVideoPreviewCommand,
   buildLosslessCompatibleVideoPreviewCommand,
+  buildStreamingCompatibleVideoPreviewCommand,
 } from "./compatibleVideoPreview";
 
 describe("compatible video preview commands", () => {
@@ -41,5 +42,18 @@ describe("compatible video preview commands", () => {
     expect(command).toContain("libx264");
     expect(command).toContain("aac");
     expect(command).toContain("scale=-2:480");
+  });
+
+  test("streams fragmented MP4 from an arbitrary source timestamp", () => {
+    const command = buildStreamingCompatibleVideoPreviewCommand({
+      ffmpegPath: input.ffmpegPath,
+      videoPath: input.videoPath,
+      startMs: 12500,
+    });
+
+    expect(command).toContain("12.500");
+    expect(command).toContain("frag_keyframe+empty_moov+default_base_moof");
+    expect(command).toContain("pipe:1");
+    expect(command).not.toContain("nokey");
   });
 });

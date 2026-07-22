@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { BrowserView, BrowserWindow, Utils } from "electrobun/bun";
 import { configGet, configSet } from "./configStore";
 import {
@@ -18,7 +17,6 @@ import type { DesktopRPC } from "./rpcTypes";
 import { mergeVideoWithSubtitle } from "./subtitles/subtitleMux";
 import { translateSubtitleFile } from "./subtitles/subtitleTranslation";
 import { resolveCliExecutable } from "./cliExecutable";
-import { createCompatibleVideoPreview } from "./compatibleVideoPreview";
 import { createGoogleTranslateTextService } from "./googleTranslate";
 import { getFasterWhisperStatus } from "./transcription/fasterWhisperStatus";
 import {
@@ -31,7 +29,6 @@ let mainWindow: BrowserWindow | null = null;
 const activeTranscriptions = new Map<string, AbortController>();
 const activeSubtitleTranslations = new Map<string, AbortController>();
 const previewServer = createLocalMediaPreviewServer();
-const previewCacheDirectory = join(Utils.paths.userData, "compatible-video-preview");
 const fileDropBroker = createLocalFileDropBroker();
 const nativeFileDropBridge = installNativeFileDropBridge((paths) => {
   fileDropBroker.publish(paths);
@@ -92,12 +89,11 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
       }),
       getLocalVideoPreviewUrl: ({ videoPath }) => ({ url: previewServer.getPreviewUrl(videoPath) }),
       getCompatibleVideoPreviewUrl: async ({ videoPath }) => {
-        const ffmpegPath = await getFfmpegPath();
-        const result = await createCompatibleVideoPreview(
-          { videoPath, cacheDirectory: previewCacheDirectory },
-          { resolveExecutable: resolveWithConfiguredFfmpeg(ffmpegPath) }
-        );
-        return { url: previewServer.getPreviewUrl(result.previewPath), reused: result.reused };
+        const ffmpegPath = resolveCliExecutable(await getFfmpegPath());
+        return {
+          url: previewServer.getStreamingPreviewUrl({ filePath: videoPath, ffmpegPath }),
+          reused: false,
+        };
       },
       getRuntimeEnvironment: () => ({ platform: process.platform, arch: process.arch, isAppleSilicon: process.platform === "darwin" && process.arch === "arm64" }),
       getFfmpegStatus: async () => getCliStatus(await getFfmpegPath(), ["-version"]),
