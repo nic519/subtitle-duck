@@ -258,10 +258,20 @@ body {
   display: none;
 }
 
-/* macOS uses the standard native title bar and its traffic-light controls. */
+/* macOS keeps only the native traffic-light controls over the app surface. */
 :root[data-platform="macos"] [data-window-title-bar-window-controls],
 :root[data-platform="macos"] [data-window-title-bar-left-divider] {
   display: none;
+}
+
+.window-drag-region {
+  display: none;
+}
+
+:root[data-platform="macos"] .window-drag-region {
+  display: block;
+  height: 32px;
+  background: var(--app-bg);
 }
 
 .dark:root {

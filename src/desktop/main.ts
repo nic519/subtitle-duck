@@ -178,10 +178,10 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
 });
 
 mainWindow = new BrowserWindow({
-  title: "",
+  title: "字幕鸭",
   url: Bun.env.ELECTROBUN_RENDERER_URL ?? "views://main/index.html",
   frame: { x: 100, y: 100, width: 1100, height: 760 },
-  titleBarStyle: "default",
+  titleBarStyle: "hiddenInset",
   renderer: "native",
   rpc,
 });
