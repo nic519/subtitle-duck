@@ -14,8 +14,6 @@ import {
   FolderOpen,
   Languages,
   LoaderCircle,
-  PanelLeftClose,
-  PanelLeftOpen,
   RefreshCw,
   Terminal,
   Video,
@@ -24,12 +22,10 @@ import {
 import {
   FixedRailLayout,
   StatusMessage,
-  TitleBarActionButton,
   ToolbarButton,
   ToolbarIconButton,
 } from "@/components/page-ui";
 import { Separator } from "@/components/ui/separator";
-import { WindowTitleBarRightContextPortal } from "@/components/app/WindowTitleBar";
 import { FilePathPicker } from "@/components/file-path-picker/FilePathPicker";
 import {
   Toast,
@@ -78,10 +74,6 @@ const subtitleGenerationLanguageOptions = [
   { value: "zh", label: "中文" },
   { value: "en", label: "英语" },
 ];
-
-const subtitleTranscriptionEngineOptions = [
-  { value: "faster-whisper", label: "Faster Whisper（海南鸡）" },
-] as const;
 
 const subtitleGenerationVideoExtensions = new Set([
   ".mp4",
@@ -160,7 +152,6 @@ export type SubtitleMuxPageContentProps = {
   onChooseFasterWhisperPython: () => void | Promise<void>;
   onChooseFasterWhisperModel: () => void | Promise<void>;
   onChooseWhisperCoreMlPackage: () => void | Promise<void>;
-  onChangeTranscriptionEngine: (engine: SubtitleTranscriptionEngine) => void;
   onChangeFfmpegPath: (path: string) => void | Promise<void>;
   onSaveFfmpegPath: (path: string) => void | Promise<void>;
   onChangeWhisperBinaryPath: (path: string) => void | Promise<void>;
@@ -484,7 +475,6 @@ export const SubtitleMuxPageContent = ({
   onChooseFasterWhisperPython,
   onChooseFasterWhisperModel,
   onChooseWhisperCoreMlPackage,
-  onChangeTranscriptionEngine,
   onChangeFfmpegPath,
   onSaveFfmpegPath,
   onChangeWhisperBinaryPath,
@@ -521,7 +511,6 @@ export const SubtitleMuxPageContent = ({
     useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPreviewUnavailable, setIsPreviewUnavailable] = useState(false);
-  const [isToolNavVisible, setIsToolNavVisible] = useState(true);
   const [generationDropNotice, setGenerationDropNotice] = useState<
     string | null
   >(null);
@@ -641,11 +630,7 @@ export const SubtitleMuxPageContent = ({
       <FixedRailLayout
         viewportClassName="px-4 pb-4 pt-3"
         gridProps={{ "data-subtitle-mux-layout": "tools" }}
-        gridClassName={`${
-          isToolNavVisible
-            ? "md:grid-cols-[176px_minmax(0,1fr)]"
-            : "md:grid-cols-[44px_minmax(0,1fr)]"
-        }`}
+        gridClassName="md:grid-cols-[176px_minmax(0,1fr)]"
         railProps={{
           "data-subtitle-tool-rail": true,
           "data-subtitle-tool-nav-style": "rail",
@@ -658,63 +643,58 @@ export const SubtitleMuxPageContent = ({
         contentClassName="px-0 py-1 md:pl-1"
         rail={
           <>
-            {isToolNavVisible ? (
-              <>
-                <div className="flex justify-end px-0.5">
+            <nav
+              data-subtitle-tool-nav="true"
+              role="tablist"
+              aria-label="工具功能"
+              className="flex min-w-0 gap-1 overflow-x-auto md:flex-col md:overflow-visible"
+            >
+              {subtitleTools.map(renderToolTab)}
+            </nav>
+            <details className="group relative mt-2 min-w-0 shrink-0 md:mt-auto">
+              <summary
+                data-subtitle-tool-ffmpeg-status={
+                  ffmpegUnavailable ? "unavailable" : "available"
+                }
+                title={ffmpegStatusTitle || undefined}
+                className={`flex cursor-pointer list-none items-center gap-1.5 rounded-[var(--control-radius-sm)] px-1.5 py-1 text-[length:var(--font-size-caption)] outline-none transition-colors hover:bg-[var(--result-row-hover)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)] [&::-webkit-details-marker]:hidden ${
+                  ffmpegUnavailable
+                    ? "text-[var(--status-error-text)]"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {ffmpegUnavailable ? (
+                  <AlertCircle className="size-3.5 shrink-0" />
+                ) : (
+                  <CircleCheck className="size-3.5 shrink-0 text-[var(--status-success-text)]" />
+                )}
+                <span className="min-w-0 truncate">{ffmpegStatusShortLabel}</span>
+              </summary>
+              <div className="absolute bottom-full left-0 z-20 mb-2 grid w-full min-w-[176px] gap-2 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--app-bg)] p-2 shadow-lg">
+                <label className="text-[length:var(--font-size-caption)] text-muted-foreground">
+                  FFmpeg 路径
+                </label>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <input
+                    value={ffmpegPath}
+                    onChange={(event) => onChangeFfmpegPath(event.target.value)}
+                    onBlur={(event) => void onSaveFfmpegPath(event.target.value)}
+                    spellCheck={false}
+                    aria-label="FFmpeg 路径"
+                    className="h-7 min-w-0 flex-1 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2 font-mono text-[11px] text-foreground outline-none focus:border-[var(--control-accent)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
+                  />
                   <ToolbarIconButton
-                    type="button"
                     darkMode={darkMode}
-                    aria-label="隐藏工具栏"
-                    title="隐藏工具栏"
-                    onClick={() => setIsToolNavVisible(false)}
-                    className="h-7 w-7"
+                    onClick={() => void onChooseFfmpegBinary()}
+                    aria-label="选择 FFmpeg 可执行文件"
+                    title="选择 FFmpeg 可执行文件"
+                    className="h-7 w-7 shrink-0"
                   >
-                    <PanelLeftClose className="size-3.5" />
+                    <FolderOpen className="size-3.5" />
                   </ToolbarIconButton>
                 </div>
-                <nav
-                  data-subtitle-tool-nav="true"
-                  role="tablist"
-                  aria-label="工具功能"
-                  className="flex min-w-0 gap-1 overflow-x-auto md:flex-col md:overflow-visible"
-                >
-                  {subtitleTools.map(renderToolTab)}
-                </nav>
-                <div
-                  data-subtitle-tool-ffmpeg-status={
-                    ffmpegUnavailable ? "unavailable" : "available"
-                  }
-                  title={ffmpegStatusTitle || undefined}
-                  className={`mt-2 flex min-w-0 shrink-0 items-center gap-1.5 text-[length:var(--font-size-caption)] md:mt-auto ${
-                    ffmpegUnavailable
-                      ? "text-[var(--status-error-text)]"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  {ffmpegUnavailable ? (
-                    <AlertCircle className="size-3.5 shrink-0" />
-                  ) : (
-                    <CircleCheck className="size-3.5 shrink-0 text-[var(--status-success-text)]" />
-                  )}
-                  <span className="min-w-0 truncate">
-                    {ffmpegStatusShortLabel}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className="flex justify-center px-1">
-                <ToolbarIconButton
-                  type="button"
-                  darkMode={darkMode}
-                  aria-label="显示工具栏"
-                  title="显示工具栏"
-                  onClick={() => setIsToolNavVisible(true)}
-                  className="h-8 w-8"
-                >
-                  <PanelLeftOpen className="size-3.5" />
-                </ToolbarIconButton>
               </div>
-            )}
+            </details>
           </>
         }
       >
@@ -727,24 +707,17 @@ export const SubtitleMuxPageContent = ({
           hidden={activeTool !== "merge"}
           className="mx-auto w-full max-w-[900px] min-w-0"
         >
-          {activeTool === "merge" ? (
-            <WindowTitleBarRightContextPortal>
-              <div
-                data-subtitle-merge-title-bar-actions
-                className="flex shrink-0 items-center gap-2"
-              >
-                <TitleBarActionButton
-                  darkMode={darkMode}
-                  onClick={() => void onStart()}
-                  className="subtitle-accent-action shrink-0"
-                  disabled={!canStart || isMerging || ffmpegUnavailable}
-                >
-                  {isMerging ? "正在合并字幕" : "开始合并"}
-                </TitleBarActionButton>
-              </div>
-            </WindowTitleBarRightContextPortal>
-          ) : null}
           <div className="grid gap-4">
+            <div className="flex justify-end">
+              <ToolbarButton
+                darkMode={darkMode}
+                onClick={() => void onStart()}
+                className="subtitle-accent-action shrink-0"
+                disabled={!canStart || isMerging || ffmpegUnavailable}
+              >
+                {isMerging ? "正在合并字幕" : "开始合并"}
+              </ToolbarButton>
+            </div>
             <SubtitleMergeDropzone
               darkMode={darkMode}
               videoPath={videoPath}
@@ -754,29 +727,6 @@ export const SubtitleMuxPageContent = ({
               onChooseVideo={onChooseVideo}
               onChooseSubtitle={onChooseSubtitle}
             />
-
-            <label className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2 px-3 text-[length:var(--font-size-caption)]">
-              <span className="text-muted-foreground">FFmpeg</span>
-              <input
-                value={ffmpegPath}
-                onChange={(event) => onChangeFfmpegPath(event.target.value)}
-                onBlur={(event) => void onSaveFfmpegPath(event.target.value)}
-                disabled={isMerging}
-                spellCheck={false}
-                aria-label="FFmpeg 路径"
-                className="h-7 min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2 font-mono text-[11px] text-foreground outline-none focus:border-[var(--control-accent)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
-              />
-              <ToolbarIconButton
-                darkMode={darkMode}
-                onClick={() => void onChooseFfmpegBinary()}
-                disabled={isMerging}
-                aria-label="选择 FFmpeg 可执行文件"
-                title="选择 FFmpeg 可执行文件"
-                className="h-7 w-7"
-              >
-                <FolderOpen className="size-3.5" />
-              </ToolbarIconButton>
-            </label>
 
             {ffmpegUnavailable ? (
               <FfmpegInstallGuide
@@ -851,41 +801,34 @@ export const SubtitleMuxPageContent = ({
           hidden={activeTool !== "generate"}
           className="min-w-0"
         >
-          {activeTool === "generate" ? (
-            <WindowTitleBarRightContextPortal>
-              <div
-                data-subtitle-generate-title-bar-actions
-                className="flex shrink-0 items-center gap-2"
-              >
-                {isGenerating ? (
-                  <TitleBarActionButton
-                    darkMode={darkMode}
-                    onClick={() => void onCancelGenerateSubtitle()}
-                    disabled={isCancelingGeneration}
-                  >
-                    {isCancelingGeneration ? "正在停止" : "停止任务"}
-                  </TitleBarActionButton>
-                ) : null}
-                <TitleBarActionButton
-                  darkMode={darkMode}
-                  onClick={() => void onGenerateSubtitle()}
-                  className="subtitle-accent-action shrink-0"
-                  disabled={
-                    !canGenerateSubtitle ||
-                    isGenerating ||
-                    (transcriptionEngine === "faster-whisper"
-                      ? fasterWhisperUnavailable
-                      : whisperUnavailable)
-                  }
-                >
-                  {isGenerating && transcriptionProgressMessage
-                    ? "正在生成字幕"
-                    : "生成字幕"}
-                </TitleBarActionButton>
-              </div>
-            </WindowTitleBarRightContextPortal>
-          ) : null}
           <div className="mx-auto grid w-full max-w-[900px] gap-4">
+            <div className="flex justify-end gap-2">
+              {isGenerating ? (
+                <ToolbarButton
+                  darkMode={darkMode}
+                  onClick={() => void onCancelGenerateSubtitle()}
+                  disabled={isCancelingGeneration}
+                >
+                  {isCancelingGeneration ? "正在停止" : "停止任务"}
+                </ToolbarButton>
+              ) : null}
+              <ToolbarButton
+                darkMode={darkMode}
+                onClick={() => void onGenerateSubtitle()}
+                className="subtitle-accent-action shrink-0"
+                disabled={
+                  !canGenerateSubtitle ||
+                  isGenerating ||
+                  (transcriptionEngine === "faster-whisper"
+                    ? fasterWhisperUnavailable
+                    : whisperUnavailable)
+                }
+              >
+                {isGenerating && transcriptionProgressMessage
+                  ? "正在生成字幕"
+                  : "生成字幕"}
+              </ToolbarButton>
+            </div>
             <div
               data-subtitle-generate-setup-row
               className="grid gap-4 md:grid-cols-2 md:items-stretch"
@@ -918,38 +861,9 @@ export const SubtitleMuxPageContent = ({
 
               <div
                 data-subtitle-generate-whisper-card="compact"
-                data-subtitle-transcription-engine={transcriptionEngine}
+                data-subtitle-transcription-engine="faster-whisper"
                 className="grid min-w-0 content-start gap-2 pt-1"
               >
-                <label className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] items-center gap-2 text-[length:var(--font-size-caption)] text-muted-foreground">
-                  <span className="whitespace-nowrap">引擎</span>
-                  <Select
-                    value={transcriptionEngine}
-                    onValueChange={(value) =>
-                      onChangeTranscriptionEngine(
-                        value as SubtitleTranscriptionEngine,
-                      )
-                    }
-                    disabled={isGenerating}
-                  >
-                    <SelectTrigger className="h-[var(--control-height-md)] w-full min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2.5 text-[length:var(--font-size-control)] text-foreground outline-none transition-colors focus:border-[var(--control-accent)] focus:bg-[var(--form-field-focus-bg)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]">
-                      <span data-slot="select-value" className="truncate">
-                        {
-                          subtitleTranscriptionEngineOptions.find(
-                            (option) => option.value === transcriptionEngine,
-                          )?.label
-                        }
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {subtitleTranscriptionEngineOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
                 {transcriptionEngine === "faster-whisper" ? (
                   <>
                     <div className="grid min-w-0 gap-3 border-l-2 border-[var(--subtitle-accent-border)] pl-3">
@@ -1063,10 +977,6 @@ export const SubtitleMuxPageContent = ({
                             <FolderOpen className="size-3.5" />
                           </ToolbarIconButton>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 text-[length:var(--font-size-caption)] text-muted-foreground">
-                        <span className="h-px w-5 bg-[var(--subtitle-accent-border)]" />
-                        日语识别 · 输出中文字幕
                       </div>
                     </div>
                   </>
@@ -1419,37 +1329,30 @@ export const SubtitleMuxPageContent = ({
           hidden={activeTool !== "translate"}
           className="min-w-0"
         >
-          {activeTool === "translate" ? (
-            <WindowTitleBarRightContextPortal>
-              <div
-                data-subtitle-translation-title-bar-actions
-                className="flex shrink-0 items-center gap-2"
-              >
-                {translationIsComplete ? (
-                  <TitleBarActionButton
-                    darkMode={darkMode}
-                    onClick={() => void onRevealTranslatedSubtitle()}
-                    className="subtitle-accent-action shrink-0"
-                  >
-                    打开字幕
-                  </TitleBarActionButton>
-                ) : (
-                  <TitleBarActionButton
-                    darkMode={darkMode}
-                    onClick={() => void onTranslateSubtitle()}
-                    className="subtitle-accent-action shrink-0"
-                    disabled={!subtitleTranslationPath || isTranslatingSubtitle}
-                  >
-                    {isTranslatingSubtitle ? "正在翻译字幕" : "开始翻译"}
-                  </TitleBarActionButton>
-                )}
-              </div>
-            </WindowTitleBarRightContextPortal>
-          ) : null}
           <div
             data-subtitle-translation-workflow="true"
             className="relative mx-auto grid w-full max-w-[900px] gap-0 px-1"
           >
+            <div className="mb-4 flex justify-end">
+              {translationIsComplete ? (
+                <ToolbarButton
+                  darkMode={darkMode}
+                  onClick={() => void onRevealTranslatedSubtitle()}
+                  className="subtitle-accent-action shrink-0"
+                >
+                  打开字幕
+                </ToolbarButton>
+              ) : (
+                <ToolbarButton
+                  darkMode={darkMode}
+                  onClick={() => void onTranslateSubtitle()}
+                  className="subtitle-accent-action shrink-0"
+                  disabled={!subtitleTranslationPath || isTranslatingSubtitle}
+                >
+                  {isTranslatingSubtitle ? "正在翻译字幕" : "开始翻译"}
+                </ToolbarButton>
+              )}
+            </div>
             <TranslationWorkflowStep
               id="file"
               number="01"

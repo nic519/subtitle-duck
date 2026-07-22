@@ -53,7 +53,7 @@ type WindowTitleBarAction =
   };
 
 interface WindowTitleBarProps {
-  title: string;
+  title?: string;
   darkMode: boolean;
   onMinimize: () => void;
   onClose: () => void;
@@ -134,11 +134,11 @@ export const WindowTitleBar = ({
           <div className="electrobun-webkit-app-region-no-drag min-w-0">
             {titleContent}
           </div>
-        ) : (
+        ) : title ? (
           <h1 className={`truncate ${getTitleClassName(darkMode)}`}>
             {title}
           </h1>
-        )}
+        ) : null}
       </div>
       <div
         id={WINDOW_TITLE_BAR_RIGHT_CONTEXT_ID}

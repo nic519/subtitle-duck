@@ -837,25 +837,6 @@ export const SubtitleMuxPage = ({
     }
   };
 
-  const handleChangeTranscriptionEngine = async (
-    engine: SubtitleTranscriptionEngine
-  ) => {
-    try {
-      await desktopApi.configSet("subtitle_transcription_engine", engine);
-      setTranscriptionEngine(engine);
-      if (engine === "faster-whisper") {
-        await refreshFasterWhisperStatus();
-      } else {
-        await refreshWhisperStatus();
-      }
-    } catch (error) {
-      setGenerationStatus({
-        tone: "error",
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  };
-
   const handleChooseWhisperCoreMlPackage = async () => {
     if (!whisperModelPath) {
       setGenerationStatus({
@@ -1266,9 +1247,6 @@ export const SubtitleMuxPage = ({
         }
         onChooseWhisperCoreMlPackage={() =>
           void handleChooseWhisperCoreMlPackage()
-        }
-        onChangeTranscriptionEngine={(engine) =>
-          void handleChangeTranscriptionEngine(engine)
         }
         onChangeFfmpegPath={setFfmpegPath}
         onSaveFfmpegPath={(path) => void saveFfmpegPath(path)}
