@@ -1,4 +1,7 @@
-import { existsSync as defaultExistsSync } from "node:fs";
+import {
+  existsSync as defaultExistsSync,
+  statSync as defaultStatSync,
+} from "node:fs";
 import { resolveCliExecutable } from "../cliExecutable";
 
 type SpawnProcess = ReturnType<typeof Bun.spawn>;
@@ -14,6 +17,7 @@ export const getFasterWhisperStatus = async (
   input: { pythonPath: string; modelPath: string },
   deps: {
     existsSync?: typeof defaultExistsSync;
+    statSync?: typeof defaultStatSync;
     resolveExecutable?: (executable: string) => string;
     spawn?: (
       command: string[],
@@ -24,6 +28,7 @@ export const getFasterWhisperStatus = async (
   const pythonPath = input.pythonPath.trim() || "python3";
   const modelPath = input.modelPath.trim();
   const existsSync = deps.existsSync ?? defaultExistsSync;
+  const statSync = deps.statSync ?? defaultStatSync;
   const resolveExecutable = deps.resolveExecutable ?? resolveCliExecutable;
   const spawn = deps.spawn ?? ((command, options) => Bun.spawn(command, options));
   const resolvedPath = resolveExecutable(pythonPath);
@@ -43,6 +48,26 @@ export const getFasterWhisperStatus = async (
       version: null,
       error: `CT2 模型目录不存在: ${modelPath}`,
     };
+  }
+  if (resolvedPath.includes("/")) {
+    try {
+      const stat = statSync(resolvedPath);
+      if (!stat.isFile() || (stat.mode & 0o111) === 0) {
+        return {
+          available: false,
+          path: resolvedPath,
+          version: null,
+          error: `所选 Python 路径不是可执行文件: ${resolvedPath}。请选择 Python 文件，例如 ~/.venv/bin/python。`,
+        };
+      }
+    } catch {
+      return {
+        available: false,
+        path: resolvedPath,
+        version: null,
+        error: `找不到所选 Python 可执行文件: ${resolvedPath}`,
+      };
+    }
   }
 
   try {

@@ -120,8 +120,10 @@ export type SubtitleMuxPageContentProps = {
   isGenerating: boolean;
   isCancelingGeneration: boolean;
   ffmpegStatus: FfmpegStatus | null;
+  ffmpegPath: string;
   transcriptionEngine: SubtitleTranscriptionEngine;
   whisperStatus: WhisperStatus | null;
+  whisperBinaryPath: string;
   fasterWhisperStatus: FasterWhisperStatus | null;
   whisperCoreMlStatus: WhisperCoreMlStatus | null;
   isAppleSilicon: boolean;
@@ -154,10 +156,20 @@ export type SubtitleMuxPageContentProps = {
   onChooseGenerationVideo: () => void | Promise<void>;
   onChooseSubtitleTranslationFile: () => void | Promise<void>;
   onChooseWhisperModel: () => void | Promise<void>;
+  onChooseFfmpegBinary: () => void | Promise<void>;
+  onChooseWhisperBinary: () => void | Promise<void>;
   onChooseFasterWhisperPython: () => void | Promise<void>;
   onChooseFasterWhisperModel: () => void | Promise<void>;
   onChooseWhisperCoreMlPackage: () => void | Promise<void>;
   onChangeTranscriptionEngine: (engine: SubtitleTranscriptionEngine) => void;
+  onChangeFfmpegPath: (path: string) => void | Promise<void>;
+  onSaveFfmpegPath: (path: string) => void | Promise<void>;
+  onChangeWhisperBinaryPath: (path: string) => void | Promise<void>;
+  onSaveWhisperBinaryPath: (path: string) => void | Promise<void>;
+  onChangeFasterWhisperPythonPath: (path: string) => void | Promise<void>;
+  onSaveFasterWhisperPythonPath: (path: string) => void | Promise<void>;
+  onChangeFasterWhisperModelPath: (path: string) => void | Promise<void>;
+  onSaveFasterWhisperModelPath: (path: string) => void | Promise<void>;
   onChangeGenerationLanguage: (value: string) => void;
   onChangeSubtitleTranslationTargetLanguage: (value: string) => void;
   onChangeSubtitleTranslationBatchCharacters: (value: number) => void;
@@ -432,8 +444,10 @@ export const SubtitleMuxPageContent = ({
   isGenerating,
   isCancelingGeneration,
   ffmpegStatus,
+  ffmpegPath,
   transcriptionEngine,
   whisperStatus,
+  whisperBinaryPath,
   fasterWhisperStatus,
   whisperCoreMlStatus,
   isAppleSilicon,
@@ -466,10 +480,20 @@ export const SubtitleMuxPageContent = ({
   onChooseGenerationVideo,
   onChooseSubtitleTranslationFile,
   onChooseWhisperModel,
+  onChooseFfmpegBinary,
+  onChooseWhisperBinary,
   onChooseFasterWhisperPython,
   onChooseFasterWhisperModel,
   onChooseWhisperCoreMlPackage,
   onChangeTranscriptionEngine,
+  onChangeFfmpegPath,
+  onSaveFfmpegPath,
+  onChangeWhisperBinaryPath,
+  onSaveWhisperBinaryPath,
+  onChangeFasterWhisperPythonPath,
+  onSaveFasterWhisperPythonPath,
+  onChangeFasterWhisperModelPath,
+  onSaveFasterWhisperModelPath,
   onChangeGenerationLanguage,
   onChangeSubtitleTranslationTargetLanguage,
   onChangeSubtitleTranslationBatchCharacters,
@@ -534,9 +558,6 @@ export const SubtitleMuxPageContent = ({
       : "Core ML 加速未安装"
     : "正在检测 Core ML 加速";
   const whisperModelLabel = getPathTail(whisperModelPath);
-  const fasterWhisperPythonLabel =
-    getPathTail(fasterWhisperPythonPath) ?? "python3";
-  const fasterWhisperModelLabel = getPathTail(fasterWhisperModelPath);
   const fasterWhisperStatusState = fasterWhisperStatus
     ? fasterWhisperStatus.available
       ? "available"
@@ -734,6 +755,29 @@ export const SubtitleMuxPageContent = ({
               onChooseVideo={onChooseVideo}
               onChooseSubtitle={onChooseSubtitle}
             />
+
+            <label className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2 px-3 text-[length:var(--font-size-caption)]">
+              <span className="text-muted-foreground">FFmpeg</span>
+              <input
+                value={ffmpegPath}
+                onChange={(event) => onChangeFfmpegPath(event.target.value)}
+                onBlur={(event) => void onSaveFfmpegPath(event.target.value)}
+                disabled={isMerging}
+                spellCheck={false}
+                aria-label="FFmpeg 路径"
+                className="h-7 min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2 font-mono text-[11px] text-foreground outline-none focus:border-[var(--control-accent)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
+              />
+              <ToolbarIconButton
+                darkMode={darkMode}
+                onClick={() => void onChooseFfmpegBinary()}
+                disabled={isMerging}
+                aria-label="选择 FFmpeg 可执行文件"
+                title="选择 FFmpeg 可执行文件"
+                className="h-7 w-7"
+              >
+                <FolderOpen className="size-3.5" />
+              </ToolbarIconButton>
+            </label>
 
             {ffmpegUnavailable ? (
               <FfmpegInstallGuide
@@ -960,9 +1004,20 @@ export const SubtitleMuxPageContent = ({
                           <span
                             data-subtitle-tool-faster-whisper-python-path
                             title={fasterWhisperPythonPath ?? "python3"}
-                            className="truncate font-mono text-foreground"
                           >
-                            {fasterWhisperPythonLabel}
+                            <input
+                              value={fasterWhisperPythonPath ?? "python3"}
+                              onChange={(event) =>
+                                onChangeFasterWhisperPythonPath(event.target.value)
+                              }
+                              onBlur={(event) =>
+                                void onSaveFasterWhisperPythonPath(event.target.value)
+                              }
+                              disabled={isGenerating}
+                              spellCheck={false}
+                              aria-label="Faster Whisper Python 路径"
+                              className="h-7 w-full min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2 font-mono text-[11px] text-foreground outline-none focus:border-[var(--control-accent)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
+                            />
                           </span>
                           <ToolbarIconButton
                             darkMode={darkMode}
@@ -982,13 +1037,21 @@ export const SubtitleMuxPageContent = ({
                           <span
                             data-subtitle-tool-faster-whisper-model-path
                             title={fasterWhisperModelPath ?? undefined}
-                            className={`truncate font-mono ${
-                              fasterWhisperModelPath
-                                ? "text-foreground"
-                                : "text-muted-foreground"
-                            }`}
                           >
-                            {fasterWhisperModelLabel ?? "未选择"}
+                            <input
+                              value={fasterWhisperModelPath ?? ""}
+                              onChange={(event) =>
+                                onChangeFasterWhisperModelPath(event.target.value)
+                              }
+                              onBlur={(event) =>
+                                void onSaveFasterWhisperModelPath(event.target.value)
+                              }
+                              disabled={isGenerating}
+                              placeholder="选择或粘贴 CT2 模型目录"
+                              spellCheck={false}
+                              aria-label="Faster Whisper CT2 模型目录"
+                              className="h-7 w-full min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2 font-mono text-[11px] text-foreground outline-none placeholder:text-[var(--form-field-placeholder)] focus:border-[var(--control-accent)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
+                            />
                           </span>
                           <ToolbarIconButton
                             darkMode={darkMode}
@@ -1048,6 +1111,34 @@ export const SubtitleMuxPageContent = ({
                       </div>
                     ) : null}
                     <div className="grid min-w-0 gap-1 text-[length:var(--font-size-caption)]">
+                      <div className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)_auto] items-center gap-2">
+                        <span className="whitespace-nowrap text-muted-foreground">
+                          命令行
+                        </span>
+                        <input
+                          value={whisperBinaryPath}
+                          onChange={(event) =>
+                            onChangeWhisperBinaryPath(event.target.value)
+                          }
+                          onBlur={(event) =>
+                            void onSaveWhisperBinaryPath(event.target.value)
+                          }
+                          disabled={isGenerating}
+                          spellCheck={false}
+                          aria-label="whisper-cli 路径"
+                          className="h-7 min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2 font-mono text-[11px] text-foreground outline-none focus:border-[var(--control-accent)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
+                        />
+                        <ToolbarIconButton
+                          darkMode={darkMode}
+                          onClick={() => void onChooseWhisperBinary()}
+                          disabled={isGenerating}
+                          aria-label="选择 whisper-cli 可执行文件"
+                          title="选择 whisper-cli 可执行文件"
+                          className="h-7 w-7"
+                        >
+                          <FolderOpen className="size-3.5" />
+                        </ToolbarIconButton>
+                      </div>
                       <div className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)_auto] items-center gap-2">
                         <span className="whitespace-nowrap text-muted-foreground">
                           模型

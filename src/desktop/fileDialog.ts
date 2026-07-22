@@ -100,6 +100,16 @@ export const chooseFasterWhisperPythonFile = async ({
     canChooseDirectory: false,
   });
 
+export const chooseCliExecutableFile = async ({
+  openFileDialog,
+}: {
+  openFileDialog: OpenFileDialog;
+}): Promise<string | null> =>
+  chooseSinglePath(openFileDialog, {
+    canChooseFiles: true,
+    canChooseDirectory: false,
+  });
+
 export const chooseWhisperCoreMlPackageFile = async ({
   openFileDialog,
 }: {

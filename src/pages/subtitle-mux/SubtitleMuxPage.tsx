@@ -101,7 +101,9 @@ export const SubtitleMuxPage = ({
     message: string | null;
   }>({ tone: "neutral", message: null });
   const [ffmpegStatus, setFfmpegStatus] = useState<FfmpegStatus | null>(null);
+  const [ffmpegPath, setFfmpegPath] = useState("ffmpeg");
   const [whisperStatus, setWhisperStatus] = useState<WhisperStatus | null>(null);
+  const [whisperBinaryPath, setWhisperBinaryPath] = useState("whisper-cli");
   const [fasterWhisperStatus, setFasterWhisperStatus] =
     useState<FasterWhisperStatus | null>(null);
   const [whisperCoreMlStatus, setWhisperCoreMlStatus] =
@@ -193,9 +195,14 @@ export const SubtitleMuxPage = ({
     : translatedSubtitlePath;
 
   useEffect(() => {
-    void desktopApi
-      .getFfmpegStatus()
-      .then(setFfmpegStatus)
+    void Promise.all([
+      desktopApi.configGet("ffmpeg_binary_path"),
+      desktopApi.getFfmpegStatus(),
+    ])
+      .then(([path, status]) => {
+        setFfmpegPath(path?.trim() || "ffmpeg");
+        setFfmpegStatus(status);
+      })
       .catch((error) => {
         setFfmpegStatus({
           available: false,
@@ -207,9 +214,14 @@ export const SubtitleMuxPage = ({
   }, []);
 
   useEffect(() => {
-    void desktopApi
-      .getWhisperStatus()
-      .then(setWhisperStatus)
+    void Promise.all([
+      desktopApi.configGet("whisper_binary_path"),
+      desktopApi.getWhisperStatus(),
+    ])
+      .then(([path, status]) => {
+        setWhisperBinaryPath(path?.trim() || "whisper-cli");
+        setWhisperStatus(status);
+      })
       .catch((error) => {
         setWhisperStatus({
           available: false,
@@ -255,10 +267,41 @@ export const SubtitleMuxPage = ({
     return status;
   };
 
+  const saveFfmpegPath = async (value: string) => {
+    const path = value.trim() || "ffmpeg";
+    try {
+      await desktopApi.configSet("ffmpeg_binary_path", path === "ffmpeg" ? "" : path);
+      setFfmpegPath(path);
+      await refreshFfmpegStatus();
+    } catch (error) {
+      setMergeStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const refreshWhisperStatus = async () => {
     const status = await desktopApi.getWhisperStatus();
     setWhisperStatus(status);
     return status;
+  };
+
+  const saveWhisperBinaryPath = async (value: string) => {
+    const path = value.trim() || "whisper-cli";
+    try {
+      await desktopApi.configSet(
+        "whisper_binary_path",
+        path === "whisper-cli" ? "" : path,
+      );
+      setWhisperBinaryPath(path);
+      await refreshWhisperStatus();
+    } catch (error) {
+      setGenerationStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   };
 
   const refreshFasterWhisperStatus = async () => {
@@ -712,13 +755,66 @@ export const SubtitleMuxPage = ({
     }
   };
 
+  const handleChooseFfmpegBinary = async () => {
+    try {
+      const selectedPath = await desktopApi.selectFfmpegBinaryFile();
+      if (selectedPath) await saveFfmpegPath(selectedPath);
+    } catch (error) {
+      setMergeStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const handleChooseWhisperBinary = async () => {
+    try {
+      const selectedPath = await desktopApi.selectWhisperBinaryFile();
+      if (selectedPath) await saveWhisperBinaryPath(selectedPath);
+    } catch (error) {
+      setGenerationStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const saveFasterWhisperPythonPath = async (value: string) => {
+    const path = value.trim() || "python3";
+    try {
+      await desktopApi.configSet(
+        "faster_whisper_python_path",
+        path === "python3" ? "" : path,
+      );
+      setFasterWhisperPythonPath(path);
+      await refreshFasterWhisperStatus();
+    } catch (error) {
+      setGenerationStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const saveFasterWhisperModelPath = async (value: string) => {
+    const path = value.trim();
+    try {
+      await desktopApi.configSet("faster_whisper_model_path", path);
+      setFasterWhisperModelPath(path || null);
+      await refreshFasterWhisperStatus();
+    } catch (error) {
+      setGenerationStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const handleChooseFasterWhisperPython = async () => {
     try {
       const selectedPath = await desktopApi.selectFasterWhisperPythonFile();
       if (!selectedPath) return;
-      await desktopApi.configSet("faster_whisper_python_path", selectedPath);
-      setFasterWhisperPythonPath(selectedPath);
-      await refreshFasterWhisperStatus();
+      await saveFasterWhisperPythonPath(selectedPath);
       setGenerationStatus({ tone: "success", message: "Faster Whisper Python 已设置" });
     } catch (error) {
       setGenerationStatus({
@@ -732,9 +828,7 @@ export const SubtitleMuxPage = ({
     try {
       const selectedPath = await desktopApi.selectFasterWhisperModelDirectory();
       if (!selectedPath) return;
-      await desktopApi.configSet("faster_whisper_model_path", selectedPath);
-      setFasterWhisperModelPath(selectedPath);
-      await refreshFasterWhisperStatus();
+      await saveFasterWhisperModelPath(selectedPath);
       setGenerationStatus({ tone: "success", message: "Faster Whisper CT2 模型已设置" });
     } catch (error) {
       setGenerationStatus({
@@ -1130,8 +1224,10 @@ export const SubtitleMuxPage = ({
         isGenerating={isGenerating}
         isTranslatingSubtitle={isTranslatingSubtitle}
         ffmpegStatus={ffmpegStatus}
+        ffmpegPath={ffmpegPath}
         transcriptionEngine={transcriptionEngine}
         whisperStatus={whisperStatus}
+        whisperBinaryPath={whisperBinaryPath}
         fasterWhisperStatus={fasterWhisperStatus}
         whisperCoreMlStatus={whisperCoreMlStatus}
         isAppleSilicon={isAppleSilicon}
@@ -1161,6 +1257,8 @@ export const SubtitleMuxPage = ({
           void handleChooseSubtitleTranslationFile()
         }
         onChooseWhisperModel={() => void handleChooseWhisperModel()}
+        onChooseFfmpegBinary={() => void handleChooseFfmpegBinary()}
+        onChooseWhisperBinary={() => void handleChooseWhisperBinary()}
         onChooseFasterWhisperPython={() =>
           void handleChooseFasterWhisperPython()
         }
@@ -1172,6 +1270,20 @@ export const SubtitleMuxPage = ({
         }
         onChangeTranscriptionEngine={(engine) =>
           void handleChangeTranscriptionEngine(engine)
+        }
+        onChangeFfmpegPath={setFfmpegPath}
+        onSaveFfmpegPath={(path) => void saveFfmpegPath(path)}
+        onChangeWhisperBinaryPath={setWhisperBinaryPath}
+        onSaveWhisperBinaryPath={(path) => void saveWhisperBinaryPath(path)}
+        onChangeFasterWhisperPythonPath={setFasterWhisperPythonPath}
+        onSaveFasterWhisperPythonPath={(path) =>
+          void saveFasterWhisperPythonPath(path)
+        }
+        onChangeFasterWhisperModelPath={(path) =>
+          setFasterWhisperModelPath(path || null)
+        }
+        onSaveFasterWhisperModelPath={(path) =>
+          void saveFasterWhisperModelPath(path)
         }
         onChangeGenerationLanguage={setGenerationLanguage}
         onChangeSubtitleTranslationTargetLanguage={

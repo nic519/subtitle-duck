@@ -6,6 +6,7 @@ export interface SubtitleMuxRequest {
   videoPath: string;
   subtitlePath: string;
   outputPath: string;
+  ffmpegPath?: string;
 }
 
 export interface SubtitleMuxResult {
@@ -165,10 +166,16 @@ export const mergeVideoWithSubtitle = async (
 
   let process: SpawnProcess;
   try {
-    process = spawn(buildSubtitleMuxCommand(input, resolveExecutable("ffmpeg")), {
+    process = spawn(
+      buildSubtitleMuxCommand(
+        input,
+        resolveExecutable(input.ffmpegPath?.trim() || "ffmpeg"),
+      ),
+      {
       stdout: "pipe",
       stderr: "pipe",
-    });
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/ENOENT/i.test(message)) {

@@ -42,6 +42,8 @@ export type DesktopRPC = {
       selectSubtitleMuxSubtitleFile: { params: void; response: string | null };
       selectSubtitleTranslationFile: { params: void; response: string | null };
       selectWhisperModelFile: { params: void; response: string | null };
+      selectFfmpegBinaryFile: { params: void; response: string | null };
+      selectWhisperBinaryFile: { params: void; response: string | null };
       selectFasterWhisperPythonFile: { params: void; response: string | null };
       selectFasterWhisperModelDirectory: { params: void; response: string | null };
       selectWhisperCoreMlPackageFile: { params: void; response: string | null };
