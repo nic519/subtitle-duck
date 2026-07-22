@@ -29,6 +29,7 @@ import {
 
 let mainWindow: BrowserWindow | null = null;
 const activeTranscriptions = new Map<string, AbortController>();
+const activeSubtitleTranslations = new Map<string, AbortController>();
 const previewServer = createLocalMediaPreviewServer();
 const previewCacheDirectory = join(Utils.paths.userData, "compatible-video-preview");
 const fileDropBroker = createLocalFileDropBroker();
@@ -135,15 +136,26 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
       },
       cancelTranscribeVideoSubtitle: ({ videoPath }) => activeTranscriptions.get(videoPath)?.abort(),
       translateSubtitleFile: async (input) => {
+        const controller = new AbortController();
+        activeSubtitleTranslations.get(input.subtitlePath)?.abort();
+        activeSubtitleTranslations.set(input.subtitlePath, controller);
         const proxyUrl = (await configGet("subtitle_translation_proxy_url"))?.trim();
         const translateText = createGoogleTranslateTextService(requestRaw, {
           proxyConfig: proxyUrl ? { enabled: true, url: proxyUrl } : undefined,
         });
-        return translateSubtitleFile(input, {
-          translateText: async (request) => (await translateText(request)).translatedText,
-          onProgress: (progress) => rpc.send.subtitleTranslationProgress({ subtitlePath: input.subtitlePath, ...progress }),
-        });
+        try {
+          return await translateSubtitleFile(input, {
+            translateText: async (request) => (await translateText(request)).translatedText,
+            onProgress: (progress) => rpc.send.subtitleTranslationProgress({ subtitlePath: input.subtitlePath, ...progress }),
+            abortSignal: controller.signal,
+          });
+        } finally {
+          if (activeSubtitleTranslations.get(input.subtitlePath) === controller) {
+            activeSubtitleTranslations.delete(input.subtitlePath);
+          }
+        }
       },
+      cancelTranslateSubtitleFile: ({ subtitlePath }) => activeSubtitleTranslations.get(subtitlePath)?.abort(),
       testSubtitleTranslationConnection: async ({ proxyUrl }) => {
         const configuredProxyUrl = proxyUrl?.trim() || (await configGet("subtitle_translation_proxy_url"))?.trim();
         try {
@@ -172,6 +184,7 @@ mainWindow = new BrowserWindow({
 
 process.once("exit", () => {
   activeTranscriptions.forEach((controller) => controller.abort());
+  activeSubtitleTranslations.forEach((controller) => controller.abort());
   previewServer.stop();
   nativeFileDropBridge?.close();
 });

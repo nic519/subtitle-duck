@@ -2,6 +2,7 @@ export interface SubtitleTranslationRequest {
   text: string;
   sourceLanguage?: string | null;
   targetLanguage?: string | null;
+  abortSignal?: AbortSignal;
 }
 
 export type SubtitleTranslateText = (
@@ -22,7 +23,14 @@ export interface TranslateSrtContentOptions {
   maxBatchCharacters?: number;
   translateText: SubtitleTranslateText;
   onProgress?: (progress: SubtitleTranslationProgress) => void;
+  abortSignal?: AbortSignal;
 }
+
+const throwIfAborted = (abortSignal?: AbortSignal) => {
+  if (abortSignal?.aborted) {
+    throw abortSignal.reason ?? new DOMException("翻译已停止", "AbortError");
+  }
+};
 
 const SRT_TIME_LINE_PATTERN =
   /^\d{2}:\d{2}:\d{2},\d{3}\s+-->\s+\d{2}:\d{2}:\d{2},\d{3}/;
@@ -272,6 +280,7 @@ export const translateSrtContent = async (
     maxBatchCharacters = DEFAULT_SUBTITLE_TRANSLATION_BATCH_CHARACTERS,
     translateText,
     onProgress,
+    abortSignal,
   }: TranslateSrtContentOptions
 ): Promise<string> => {
   const normalizedContent = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -301,6 +310,7 @@ export const translateSrtContent = async (
   );
 
   for (const batch of batches) {
+    throwIfAborted(abortSignal);
     const cueLabel = getProgressCueLabel(batch);
     onProgress?.({
       phase: "translating",
@@ -314,6 +324,7 @@ export const translateSrtContent = async (
       text: createBatchTranslationText(batch),
       sourceLanguage,
       targetLanguage,
+      abortSignal,
     });
 
     const translatedByCueIndex =
@@ -326,12 +337,14 @@ export const translateSrtContent = async (
               text: cue.text,
               sourceLanguage,
               targetLanguage,
+              abortSignal,
             }),
           ])
         )
       );
 
     for (const cue of batch) {
+      throwIfAborted(abortSignal);
       translatedBlocks[cue.blockIndex] = [
         ...cue.headerLines,
         cleanRepeatedSubtitleText(

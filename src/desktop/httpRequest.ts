@@ -6,6 +6,7 @@ export type RawHttpRequest = {
   body?: string;
   headers?: Record<string, string>;
   timeoutMs?: number;
+  abortSignal?: AbortSignal;
 };
 
 export type MyJavProxyConfig = {
@@ -22,7 +23,7 @@ export const buildRawRequestInit = (
     method: request.method,
     body: request.body,
     headers: request.headers,
-    signal: AbortSignal.timeout(request.timeoutMs ?? 20_000),
+    signal: request.abortSignal ?? AbortSignal.timeout(request.timeoutMs ?? 20_000),
     ...(proxyUrl ? { proxy: proxyUrl } : {}),
   };
 };

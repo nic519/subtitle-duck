@@ -10,6 +10,7 @@ import {
   Captions,
   CircleCheck,
   CircleX,
+  Combine,
   ExternalLink,
   FolderOpen,
   Languages,
@@ -121,6 +122,7 @@ export type SubtitleMuxPageContentProps = {
   whisperModelPath: string | null;
   fasterWhisperPythonPath: string | null;
   fasterWhisperModelPath: string | null;
+  fasterWhisperModelHistory: string[];
   generationLanguage: string;
   generatedSubtitlePath: string | null;
   progressMessage: string | null;
@@ -168,6 +170,7 @@ export type SubtitleMuxPageContentProps = {
   onChangeSubtitleTranslationBatchCharacters: (value: number) => void;
   onChangeSubtitleTranslationProxyUrl: (value: string) => void;
   onTestSubtitleTranslationConnection: () => void;
+  onCancelSubtitleTranslation: () => void;
   onUseGenerationVideoPath: (path: string) => void;
   onUseSubtitleTranslationPath: (path: string) => void;
   onDropGenerationVideoPaths: (paths: string[]) => void;
@@ -197,7 +200,7 @@ const subtitleTools: Array<{
   label: string;
   icon: LucideIcon;
 }> = [
-  { id: "merge", label: "字幕合并", icon: Languages },
+  { id: "merge", label: "字幕合并", icon: Combine },
   { id: "generate", label: "字幕生成", icon: Captions },
   { id: "translate", label: "字幕翻译", icon: Languages },
 ];
@@ -449,6 +452,7 @@ export const SubtitleMuxPageContent = ({
   whisperModelPath,
   fasterWhisperPythonPath,
   fasterWhisperModelPath,
+  fasterWhisperModelHistory,
   generationLanguage,
   generatedSubtitlePath,
   progressMessage,
@@ -496,6 +500,7 @@ export const SubtitleMuxPageContent = ({
   onChangeSubtitleTranslationBatchCharacters,
   onChangeSubtitleTranslationProxyUrl,
   onTestSubtitleTranslationConnection,
+  onCancelSubtitleTranslation,
   onUseGenerationVideoPath,
   onUseSubtitleTranslationPath,
   onDropGenerationVideoPaths,
@@ -603,6 +608,13 @@ export const SubtitleMuxPageContent = ({
   const subtitleTranslationFileName = getPathTail(subtitleTranslationPath);
   const subtitleTranslationOutputName = getPathTail(
     subtitleTranslationOutputPath,
+  );
+  const canClearMerge = Boolean(
+    videoPath ||
+      subtitlePath ||
+      outputPath ||
+      progressMessage ||
+      mergeStatusMessage,
   );
   const getPanelState = (toolId: SubtitleToolId) =>
     activeTool === toolId ? "active" : "inactive";
@@ -718,7 +730,15 @@ export const SubtitleMuxPageContent = ({
           className="mx-auto w-full max-w-[900px] min-w-0"
         >
           <div className="grid gap-4">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <ToolbarButton
+                darkMode={darkMode}
+                onClick={onClear}
+                disabled={!canClearMerge || isMerging}
+                className="bg-transparent text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
+              >
+                清空
+              </ToolbarButton>
               <ToolbarButton
                 darkMode={darkMode}
                 onClick={() => void onStart()}
@@ -770,16 +790,8 @@ export const SubtitleMuxPageContent = ({
               </div>
             ) : null}
 
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <ToolbarButton
-                darkMode={darkMode}
-                onClick={onClear}
-                disabled={isMerging}
-                className="bg-transparent text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
-              >
-                清空
-              </ToolbarButton>
-              {mergeStatusTone === "success" && outputPath ? (
+            {mergeStatusTone === "success" && outputPath ? (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 <ToolbarButton
                   darkMode={darkMode}
                   onClick={() => void onRevealOutput()}
@@ -787,8 +799,8 @@ export const SubtitleMuxPageContent = ({
                 >
                   打开文件夹
                 </ToolbarButton>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
 
             {mergeStatusMessage && mergeStatusTone === "neutral" ? (
               <div className="text-[length:var(--font-size-caption)] text-muted-foreground">
@@ -959,7 +971,11 @@ export const SubtitleMuxPageContent = ({
                           </span>
                           <span
                             data-subtitle-tool-faster-whisper-model-path
-                            title={fasterWhisperModelPath ?? undefined}
+                            title={
+                              fasterWhisperModelHistory.length > 0
+                                ? "可从下拉列表快速切换已成功使用的模型"
+                                : fasterWhisperModelPath ?? undefined
+                            }
                           >
                             <input
                               value={fasterWhisperModelPath ?? ""}
@@ -971,10 +987,18 @@ export const SubtitleMuxPageContent = ({
                               }
                               disabled={isGenerating}
                               placeholder="选择或粘贴 CT2 模型目录"
+                              list="faster-whisper-successful-models"
                               spellCheck={false}
                               aria-label="Faster Whisper CT2 模型目录"
                               className="h-7 w-full min-w-0 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2 font-mono text-[11px] text-foreground outline-none placeholder:text-[var(--form-field-placeholder)] focus:border-[var(--control-accent)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
                             />
+                            <datalist id="faster-whisper-successful-models">
+                              {fasterWhisperModelHistory.map((modelPath) => (
+                                <option key={modelPath} value={modelPath}>
+                                  已成功使用
+                                </option>
+                              ))}
+                            </datalist>
                           </span>
                           <ToolbarIconButton
                             darkMode={darkMode}
@@ -1343,7 +1367,7 @@ export const SubtitleMuxPageContent = ({
             data-subtitle-translation-workflow="true"
             className="relative mx-auto grid w-full max-w-[900px] gap-0 px-1"
           >
-            <div className="mb-4 flex justify-end">
+            <div className="mb-4 flex justify-end gap-2">
               {translationIsComplete ? (
                 <ToolbarButton
                   darkMode={darkMode}
@@ -1351,6 +1375,14 @@ export const SubtitleMuxPageContent = ({
                   className="subtitle-accent-action shrink-0"
                 >
                   打开字幕
+                </ToolbarButton>
+              ) : isTranslatingSubtitle ? (
+                <ToolbarButton
+                  darkMode={darkMode}
+                  onClick={() => void onCancelSubtitleTranslation()}
+                  className="shrink-0"
+                >
+                  停止翻译
                 </ToolbarButton>
               ) : (
                 <ToolbarButton
@@ -1513,7 +1545,7 @@ export const SubtitleMuxPageContent = ({
                     data-subtitle-translation-progress="true"
                     role="status"
                     aria-live="polite"
-                    className="subtitle-accent-line grid gap-2 border-t pt-3"
+                    className="subtitle-accent-line grid gap-2 pt-1"
                   >
                     <div className="flex min-w-0 items-center justify-between gap-3 text-[length:var(--font-size-caption)] text-muted-foreground">
                       <span className="min-w-0 truncate">
@@ -1554,58 +1586,63 @@ export const SubtitleMuxPageContent = ({
                     {subtitleTranslationStatusMessage}
                   </div>
                 ) : subtitleTranslationStatusMessage ? (
-                  <StatusMessage tone={subtitleTranslationStatusTone}>
-                    {subtitleTranslationStatusMessage}
-                  </StatusMessage>
+                  <div
+                    className={`flex items-center gap-2 text-[length:var(--font-size-caption)] ${
+                      subtitleTranslationStatusTone === "success"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-destructive"
+                    }`}
+                  >
+                    {subtitleTranslationStatusTone === "success" ? (
+                      <CircleCheck className="size-4 shrink-0" />
+                    ) : (
+                      <CircleX className="size-4 shrink-0" />
+                    )}
+                    <span>{subtitleTranslationStatusMessage}</span>
+                  </div>
                 ) : null}
               </div>
             </TranslationWorkflowStep>
           </div>
-          <div className="mx-auto mt-6 grid w-full max-w-[900px] gap-3 border-t border-[var(--result-divider)] px-1 pt-4 text-[length:var(--font-size-caption)]">
-            <div className="flex items-center gap-2">
-              {subtitleTranslationConnectionStatus === "testing" ? (
-                <LoaderCircle className="size-3.5 animate-spin text-[var(--subtitle-accent-muted)]" />
-              ) : subtitleTranslationConnectionStatus === "available" ? (
-                <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-              ) : subtitleTranslationConnectionStatus === "unavailable" ? (
+          {subtitleTranslationConnectionStatus === "unavailable" ? (
+            <div className="mx-auto mt-7 w-full max-w-[900px] px-1 text-[length:var(--font-size-caption)]">
+              <div className="rounded-2xl bg-white/[0.035] px-4 py-3.5 shadow-[inset_2px_0_0_rgb(127_100_150_/_0.7)]">
+                <div className="flex items-center gap-2">
                 <CircleX className="size-3.5 text-destructive" />
-              ) : null}
-              <span className={subtitleTranslationConnectionStatus === "unavailable" ? "text-destructive" : "text-muted-foreground"}>
-                {subtitleTranslationConnectionStatus === "testing"
-                  ? "正在检查翻译连接"
-                  : subtitleTranslationConnectionStatus === "available"
-                    ? "翻译连接正常"
-                    : subtitleTranslationConnectionStatus === "unavailable"
-                      ? "连接需要代理或重试"
-                      : "尚未检查翻译连接"}
-              </span>
-              {subtitleTranslationConnectionError ? <span className="sr-only">{subtitleTranslationConnectionError}</span> : null}
+                  <span className="text-destructive">连接需要代理或重试</span>
+                  {subtitleTranslationConnectionError ? <span className="sr-only">{subtitleTranslationConnectionError}</span> : null}
+                </div>
+                <div className="mt-3 grid items-end gap-x-5 gap-y-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <label className="flex min-w-0 items-center gap-3 text-muted-foreground">
+                    <span className="shrink-0">代理地址</span>
+                    <input
+                      data-subtitle-translation-proxy-input="true"
+                      type="url"
+                      inputMode="url"
+                      autoComplete="off"
+                      value={subtitleTranslationProxyUrl}
+                      placeholder="http://127.0.0.1:7890"
+                      disabled={isTranslatingSubtitle}
+                      onChange={(event) => onChangeSubtitleTranslationProxyUrl(event.target.value)}
+                      className="h-8 min-w-0 max-w-md flex-1 border-b border-white/15 bg-transparent px-1 text-[length:var(--font-size-control)] text-foreground outline-none transition-colors placeholder:text-[var(--form-field-placeholder)] focus:border-[var(--control-accent)] focus:ring-0"
+                    />
+                  </label>
+                  <span className="pb-1 text-muted-foreground/80">留空时使用直接连接</span>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void onTestSubtitleTranslationConnection()}
+                    disabled={isTranslatingSubtitle}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
+                  >
+                    <RefreshCw className="size-3.5" />
+                    重新测试
+                  </button>
+                </div>
+              </div>
             </div>
-            <label className="flex min-w-0 items-center gap-3 text-muted-foreground">
-              <span className="shrink-0">代理地址</span>
-              <input
-                data-subtitle-translation-proxy-input="true"
-                type="url"
-                inputMode="url"
-                autoComplete="off"
-                value={subtitleTranslationProxyUrl}
-                placeholder="http://127.0.0.1:7890"
-                disabled={isTranslatingSubtitle}
-                onChange={(event) => onChangeSubtitleTranslationProxyUrl(event.target.value)}
-                className="h-[var(--control-height-md)] min-w-0 max-w-md flex-1 rounded-[var(--control-radius-sm)] border border-[var(--form-field-border)] bg-[var(--form-field-bg)] px-2.5 text-[length:var(--font-size-control)] text-foreground outline-none transition-colors placeholder:text-[var(--form-field-placeholder)] focus:border-[var(--control-accent)] focus:bg-[var(--form-field-focus-bg)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)]"
-              />
-              <span className="hidden sm:inline">留空直连</span>
-            </label>
-            <div className="flex justify-end">
-              <ToolbarButton
-                darkMode={darkMode}
-                onClick={() => void onTestSubtitleTranslationConnection()}
-                disabled={subtitleTranslationConnectionStatus === "testing" || isTranslatingSubtitle}
-              >
-                {subtitleTranslationConnectionStatus === "testing" ? "正在检查网络" : "重新测试"}
-              </ToolbarButton>
-            </div>
-          </div>
+          ) : null}
         </section>
 
       </FixedRailLayout>

@@ -127,6 +127,8 @@ export const desktopApi = {
     try { return await electrobun.rpc.request.translateSubtitleFile(input); }
     finally { translationListeners.delete(unsubscribe); }
   },
+  cancelTranslateSubtitleFile: (input: { subtitlePath: string }) =>
+    electrobun?.rpc.request.cancelTranslateSubtitleFile(input) ?? unavailable("停止字幕翻译"),
   testSubtitleTranslationConnection: (proxyUrl?: string | null) =>
     electrobun?.rpc.request.testSubtitleTranslationConnection({ proxyUrl }) ?? unavailable("测试翻译服务"),
   onWhisperTranscriptionProgress(listener: Listener<WhisperTranscriptionProgressEvent>) {

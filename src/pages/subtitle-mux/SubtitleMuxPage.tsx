@@ -20,6 +20,10 @@ import {
 } from "../../subtitle-mux/subtitleMuxModel";
 import { buildSubtitleTranslationOutputPath } from "../../subtitle-mux/subtitleTranslation";
 import {
+  addSuccessfulFasterWhisperModel,
+  parseFasterWhisperModelHistory,
+} from "../../subtitle-mux/fasterWhisperModelHistory";
+import {
   updateSubtitleTranslationUiState,
   type SubtitleTranslationUiAction,
 } from "../../subtitle-mux/subtitleTranslationUiState";
@@ -37,6 +41,8 @@ const EMPTY_DRAFT: SubtitleMuxDraft = {
 };
 
 const SUBTITLE_MUX_ACTIVE_TOOL_CONFIG_KEY = "subtitle_mux_active_tool";
+const FASTER_WHISPER_MODEL_HISTORY_CONFIG_KEY =
+  "faster_whisper_successful_model_history";
 
 const isSubtitleToolId = (value: string | null): value is SubtitleToolId =>
   value === "merge" ||
@@ -116,6 +122,9 @@ export const SubtitleMuxPage = ({
     useState<string | null>("python3");
   const [fasterWhisperModelPath, setFasterWhisperModelPath] =
     useState<string | null>(null);
+  const [fasterWhisperModelHistory, setFasterWhisperModelHistory] = useState<
+    string[]
+  >([]);
   const [activeTool, setActiveTool] =
     useState<SubtitleToolId>(initialActiveTool);
   const [generationLanguage, setGenerationLanguage] = useState("auto");
@@ -317,12 +326,16 @@ export const SubtitleMuxPage = ({
     void Promise.all([
       desktopApi.configGet("faster_whisper_python_path"),
       desktopApi.configGet("faster_whisper_model_path"),
+      desktopApi.configGet(FASTER_WHISPER_MODEL_HISTORY_CONFIG_KEY),
       desktopApi.getFasterWhisperStatus(),
     ])
-      .then(([pythonPath, modelPath, status]) => {
+      .then(([pythonPath, modelPath, modelHistory, status]) => {
         setTranscriptionEngine("faster-whisper");
         setFasterWhisperPythonPath(pythonPath?.trim() || "python3");
         setFasterWhisperModelPath(modelPath?.trim() || null);
+        setFasterWhisperModelHistory(
+          parseFasterWhisperModelHistory(modelHistory),
+        );
         setFasterWhisperStatus(status);
       })
       .catch((error) => {
@@ -664,6 +677,24 @@ export const SubtitleMuxPage = ({
       if (!selectedPath) return;
       useSubtitleTranslationPath(selectedPath);
     } catch (error) {
+      const wasCancelled = error instanceof DOMException && error.name === "AbortError";
+      setSubtitleTranslationStatus({
+        tone: wasCancelled ? "neutral" : "error",
+        message: wasCancelled
+          ? "已停止字幕翻译"
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
+  };
+
+  const handleCancelSubtitleTranslation = async () => {
+    if (!subtitleTranslationPath || !isTranslatingSubtitle) return;
+    setSubtitleTranslationStatus({ tone: "neutral", message: "正在停止翻译" });
+    try {
+      await desktopApi.cancelTranslateSubtitleFile({ subtitlePath: subtitleTranslationPath });
+    } catch (error) {
       setSubtitleTranslationStatus({
         tone: "error",
         message: error instanceof Error ? error.message : String(error),
@@ -840,6 +871,24 @@ export const SubtitleMuxPage = ({
     }
   };
 
+  const rememberSuccessfulFasterWhisperModel = async () => {
+    const nextHistory = addSuccessfulFasterWhisperModel(
+      fasterWhisperModelHistory,
+      fasterWhisperModelPath,
+    );
+    if (nextHistory === fasterWhisperModelHistory) return;
+
+    setFasterWhisperModelHistory(nextHistory);
+    try {
+      await desktopApi.configSet(
+        FASTER_WHISPER_MODEL_HISTORY_CONFIG_KEY,
+        JSON.stringify(nextHistory),
+      );
+    } catch {
+      // The generated subtitle is still valid when saving the convenience history fails.
+    }
+  };
+
   const handleChooseFasterWhisperPython = async () => {
     try {
       const selectedPath = await desktopApi.selectFasterWhisperPythonFile();
@@ -972,6 +1021,12 @@ export const SubtitleMuxPage = ({
           }
         }
       );
+      if (
+        transcriptionEngine === "faster-whisper" &&
+        result.completedRanges.length > 0
+      ) {
+        void rememberSuccessfulFasterWhisperModel();
+      }
       setGeneratedSubtitlePath(result.outputPath);
       const failedDetails = result.failedRanges
         .map(({ range, error }) => `${formatGenerationRange(range)}：${error}`)
@@ -1266,6 +1321,7 @@ export const SubtitleMuxPage = ({
         whisperModelPath={whisperModelPath}
         fasterWhisperPythonPath={fasterWhisperPythonPath}
         fasterWhisperModelPath={fasterWhisperModelPath}
+        fasterWhisperModelHistory={fasterWhisperModelHistory}
         generationLanguage={generationLanguage}
         canGenerateSubtitle={canGenerateSubtitle}
         isCancelingGeneration={isCancelingGeneration}
@@ -1323,6 +1379,7 @@ export const SubtitleMuxPage = ({
         }
         onChangeSubtitleTranslationProxyUrl={handleChangeSubtitleTranslationProxyUrl}
         onTestSubtitleTranslationConnection={handleTestSubtitleTranslationConnection}
+        onCancelSubtitleTranslation={handleCancelSubtitleTranslation}
         onUseGenerationVideoPath={(path) => void loadGenerationVideo(path)}
         onUseSubtitleTranslationPath={useSubtitleTranslationPath}
         onDropGenerationVideoPaths={handleDropGenerationVideoPaths}

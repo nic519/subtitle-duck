@@ -46,9 +46,11 @@ export const translateSubtitleFile = async (
   {
     translateText,
     onProgress,
+    abortSignal,
   }: {
     translateText: SubtitleTranslateText;
     onProgress?: (progress: SubtitleTranslationProgress) => void;
+    abortSignal?: AbortSignal;
   }
 ): Promise<TranslateSubtitleFileResult> => {
   const normalizedSubtitlePath = subtitlePath.trim();
@@ -65,6 +67,7 @@ export const translateSubtitleFile = async (
     maxBatchCharacters: maxBatchCharacters ?? undefined,
     translateText,
     onProgress,
+    abortSignal,
   });
   const outputPath = buildSubtitleTranslationOutputPath(
     normalizedSubtitlePath,

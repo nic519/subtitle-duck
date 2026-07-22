@@ -8,6 +8,7 @@ export interface GoogleTranslateTextInput {
   text: string;
   sourceLanguage?: string | null;
   targetLanguage?: string | null;
+  abortSignal?: AbortSignal;
 }
 
 export interface GoogleTranslateTextResult {
@@ -120,6 +121,7 @@ export const createGoogleTranslateTextService =
     text,
     sourceLanguage,
     targetLanguage,
+    abortSignal,
   }: GoogleTranslateTextInput): Promise<GoogleTranslateTextResult> => {
     const originalText = text.trim();
     if (!originalText) {
@@ -140,6 +142,7 @@ export const createGoogleTranslateTextService =
         method,
         headers: GOOGLE_TRANSLATE_HEADERS,
         timeoutMs: options.timeoutMs ?? DEFAULT_GOOGLE_TRANSLATE_TIMEOUT_MS,
+        abortSignal,
       },
       options.proxyConfig
     );

@@ -469,4 +469,34 @@ describe("subtitleTranslation", () => {
       },
     ]);
   });
+
+  test("stops before starting another subtitle batch", async () => {
+    const controller = new AbortController();
+    let callCount = 0;
+
+    await expect(
+      translateSrtContent(
+        [
+          "1",
+          "00:00:01,000 --> 00:00:03,000",
+          "12345",
+          "",
+          "2",
+          "00:00:04,000 --> 00:00:05,500",
+          "67890",
+        ].join("\n"),
+        {
+          maxBatchCharacters: 9,
+          abortSignal: controller.signal,
+          translateText: async ({ text }) => {
+            callCount += 1;
+            controller.abort();
+            return text;
+          },
+        },
+      ),
+    ).rejects.toHaveProperty("name", "AbortError");
+
+    expect(callCount).toBe(1);
+  });
 });
