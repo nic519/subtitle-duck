@@ -34,6 +34,10 @@ describe("compatible video preview commands", () => {
 
   test("keeps the browser-compatible transcode fallback", () => {
     const command = buildCompatibleVideoPreviewCommand(input);
+    expect(command).toContain("-skip_frame");
+    expect(command).toContain("nokey");
+    expect(command).toContain("-fps_mode");
+    expect(command).toContain("passthrough");
     expect(command).toContain("libx264");
     expect(command).toContain("aac");
     expect(command).toContain("scale=-2:480");

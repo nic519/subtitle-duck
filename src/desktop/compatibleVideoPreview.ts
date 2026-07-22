@@ -6,7 +6,7 @@ import { resolveCliExecutable } from "./cliExecutable";
 
 type SpawnProcess = ReturnType<typeof Bun.spawn>;
 
-const compatibleVideoPreviewProfile = "copy-or-h264-aac-480p-v3";
+const compatibleVideoPreviewProfile = "copy-or-keyframe-h264-aac-480p-v4";
 
 export type CompatibleVideoPreviewRequest = {
   videoPath: string;
@@ -74,6 +74,11 @@ export const buildCompatibleVideoPreviewCommand = ({
   "-y",
   "-loglevel",
   "error",
+  // A full HEVC-to-H.264 conversion of a long video can take as long as the
+  // video itself. A keyframe proxy preserves the original timeline while
+  // becoming available quickly enough to select subtitle ranges.
+  "-skip_frame",
+  "nokey",
   "-i",
   videoPath,
   "-map",
@@ -82,6 +87,8 @@ export const buildCompatibleVideoPreviewCommand = ({
   "0:a:0?",
   "-vf",
   "scale=-2:480",
+  "-fps_mode",
+  "passthrough",
   "-c:v",
   "libx264",
   "-preset",
