@@ -6,6 +6,7 @@ dist/
 build/
 out/
 release/
+artifacts/
 coverage/
 *.tsbuildinfo
 

@@ -8,8 +8,11 @@
     "dev:desktop": "bun run build && bun run prepare:native-file-drop && electrobun dev",
     "prepare:native-file-drop": "bun scripts/build-native-file-drop-bridge.ts",
     "build": "tsc && vite build",
+    "build:stable": "bun run build && bun run prepare:native-file-drop && electrobun build --env=stable",
     "preview": "vite preview",
     "build:desktop": "bun run build && bun run prepare:native-file-drop && electrobun build",
+    "package:mac": "bun scripts/assert-platform.ts macos && bun run build:stable && bun scripts/package-macos-app.ts stable",
+    "package:windows": "bun scripts/assert-platform.ts windows && bun run build:stable",
     "test": "bun test",
     "lint": "eslint . --ext .ts,.tsx"
   },
