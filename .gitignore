@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+out/
+release/
+coverage/
+*.tsbuildinfo
+
+# Electrobun and Vite caches
+.electrobun/
+.vite/
+
+# Native bridge build artifacts
+native/**/build/
+*.dylib
+
+# Environment files and local configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

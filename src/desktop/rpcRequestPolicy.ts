@@ -1,0 +1,1 @@
+export const DESKTOP_RPC_MAX_REQUEST_TIME_MS = 30 * 60 * 1_000;
