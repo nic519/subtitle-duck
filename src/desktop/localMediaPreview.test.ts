@@ -24,6 +24,7 @@ describe("local media preview streaming", () => {
       const response = await fetch(`${url}?startMs=12500`);
 
       expect(response.headers.get("content-type")).toBe("video/mp4");
+      expect(response.headers.get("access-control-allow-origin")).toBe("*");
       expect(await response.text()).toBe("fragment");
       expect(command).toContain("12.500");
     } finally {

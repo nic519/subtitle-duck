@@ -41,7 +41,11 @@ import {
 } from "@/components/ui/select";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import type { SubtitleGenerationSegment } from "../../subtitle-mux/subtitleGenerationSegments";
-import { buildStreamingPreviewSeekUrl } from "../../subtitle-mux/streamingVideoPreview";
+import {
+  attachStreamingVideoPreview,
+  buildStreamingPreviewSeekUrl,
+  isStreamingPreviewUrl,
+} from "../../subtitle-mux/streamingVideoPreview";
 import { SubtitleGenerationSegmentEditor } from "./SubtitleGenerationSegmentEditor";
 import { SubtitleMergeDropzone } from "./SubtitleMergeDropzone";
 
@@ -487,15 +491,49 @@ export const SubtitleMuxPageContent = ({
     useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const generationPreviewOffsetMsRef = useRef(0);
+  const generationPreviewAutoplayRef = useRef(false);
+  const [generationStreamingStartMs, setGenerationStreamingStartMs] =
+    useState(0);
   const [isPreviewUnavailable, setIsPreviewUnavailable] = useState(false);
+  const [streamingPreviewError, setStreamingPreviewError] = useState<string | null>(null);
   const [generationDropNotice, setGenerationDropNotice] = useState<
     string | null
   >(null);
 
   useEffect(() => {
     generationPreviewOffsetMsRef.current = 0;
+    setGenerationStreamingStartMs(0);
     setIsPreviewUnavailable(false);
+    setStreamingPreviewError(null);
   }, [generationVideoPreviewUrl]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (
+      !video ||
+      !generationVideoPreviewUrl ||
+      !isStreamingPreviewUrl(generationVideoPreviewUrl)
+    ) {
+      return;
+    }
+
+    return attachStreamingVideoPreview(
+      video,
+      buildStreamingPreviewSeekUrl(
+        generationVideoPreviewUrl,
+        generationStreamingStartMs,
+      ),
+      {
+        autoplay: generationPreviewAutoplayRef.current,
+        onError: (error) => {
+          setStreamingPreviewError(
+            error instanceof Error ? error.message : String(error),
+          );
+          setIsPreviewUnavailable(true);
+        },
+      },
+    );
+  }, [generationStreamingStartMs, generationVideoPreviewUrl]);
 
   const ffmpegUnavailable = ffmpegStatus?.available === false;
   const fasterWhisperUnavailable = fasterWhisperStatus?.available === false;
@@ -1040,7 +1078,11 @@ export const SubtitleMuxPageContent = ({
                 <video
                   ref={videoRef}
                   data-subtitle-generate-preview="true"
-                  src={generationVideoPreviewUrl}
+                  src={
+                    isStreamingPreviewUrl(generationVideoPreviewUrl)
+                      ? undefined
+                      : generationVideoPreviewUrl
+                  }
                   className="aspect-video mx-auto w-full max-w-[720px] rounded-[8px] bg-black"
                   onTimeUpdate={(event) =>
                     setGenerationPlayheadMs(
@@ -1055,7 +1097,9 @@ export const SubtitleMuxPageContent = ({
                 />
               ) : generationVideoPath ? (
                 <div className="rounded-[8px] bg-[var(--result-surface)] px-3 py-4 text-[length:var(--font-size-caption)] text-muted-foreground">
-                  当前格式无法直接预览，正在建立实时兼容预览；也可以继续手动输入开始和结束时间。
+                  {streamingPreviewError
+                    ? `实时兼容预览失败：${streamingPreviewError}`
+                    : "当前格式无法直接预览，正在建立实时兼容预览；也可以继续手动输入开始和结束时间。"}
                 </div>
               ) : null}
 
@@ -1072,15 +1116,11 @@ export const SubtitleMuxPageContent = ({
                 onSeek={(timeMs) => {
                   const video = videoRef.current;
                   if (!video) return;
-                  if (video.currentSrc.includes("/stream/")) {
+                  if (isStreamingPreviewUrl(generationVideoPreviewUrl)) {
                     const wasPlaying = !video.paused;
                     generationPreviewOffsetMsRef.current = timeMs;
-                    video.src = buildStreamingPreviewSeekUrl(
-                      generationVideoPreviewUrl ?? video.currentSrc,
-                      timeMs,
-                    );
-                    video.load();
-                    if (wasPlaying) void video.play().catch(() => undefined);
+                    generationPreviewAutoplayRef.current = wasPlaying;
+                    setGenerationStreamingStartMs(timeMs);
                   } else {
                     video.currentTime = timeMs / 1000;
                   }

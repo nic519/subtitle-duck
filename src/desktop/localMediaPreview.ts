@@ -105,11 +105,11 @@ export const createLocalMediaPreviewServer = (
               videoPath: entry.path,
               startMs,
             }),
-            { stdout: "pipe", stderr: "pipe" },
+            { stdout: "pipe", stderr: "ignore" },
           );
-          void new Response(process.stderr).text();
           return new Response(process.stdout, {
             headers: {
+              "Access-Control-Allow-Origin": "*",
               "Cache-Control": "no-store",
               "Content-Type": "video/mp4",
             },

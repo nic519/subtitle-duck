@@ -55,5 +55,7 @@ describe("compatible video preview commands", () => {
     expect(command).toContain("frag_keyframe+empty_moov+default_base_moof");
     expect(command).toContain("pipe:1");
     expect(command).not.toContain("nokey");
+    expect(command).toContain("-re");
+    expect(command).toContain("baseline");
   });
 });
