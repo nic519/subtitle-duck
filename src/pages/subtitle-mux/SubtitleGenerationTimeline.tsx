@@ -2,7 +2,7 @@ import { Trash2 } from "lucide-react";
 import type { SubtitleGenerationSegment } from "../../subtitle-mux/subtitleGenerationSegments";
 import { formatSubtitleRangeTime } from "../../subtitle-mux/subtitleGenerationRange";
 
-const segmentColors = ["#6382a4", "#7c6a9f", "#a3687d", "#5e8d91"];
+const segmentColors = ["#ffa31a"];
 
 type SubtitleGenerationTimelineProps = {
   durationMs: number;

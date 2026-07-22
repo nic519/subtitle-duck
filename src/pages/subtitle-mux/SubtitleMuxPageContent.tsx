@@ -87,6 +87,11 @@ const subtitleGenerationVideoExtensions = new Set([
   ".ts",
 ]);
 
+const subtitleDuckIconUrl = new URL(
+  "../../../assets/app-icon.png",
+  import.meta.url,
+).href;
+
 const isSubtitleGenerationVideoPath = (path: string) => {
   const normalizedPath = path.trim().toLowerCase();
   return Array.from(subtitleGenerationVideoExtensions).some((extension) =>
@@ -189,6 +194,8 @@ export type SubtitleMuxPageContentProps = {
   onRefreshFasterWhisperStatus: () => void | Promise<void>;
   onStart: () => void | Promise<void>;
   onClear: () => void;
+  onClearGeneration: () => void;
+  onClearTranslation: () => void;
   onRevealOutput: () => void | Promise<void>;
 };
 
@@ -519,6 +526,8 @@ export const SubtitleMuxPageContent = ({
   onRefreshFasterWhisperStatus,
   onStart,
   onClear,
+  onClearGeneration,
+  onClearTranslation,
   onRevealOutput,
 }: SubtitleMuxPageContentProps) => {
   const [generationPlayheadMs, setGenerationPlayheadMs] = useState(0);
@@ -616,6 +625,28 @@ export const SubtitleMuxPageContent = ({
       progressMessage ||
       mergeStatusMessage,
   );
+  const canClearGeneration = Boolean(
+    generationVideoPath ||
+      generationVideoPreviewUrl ||
+      generationDurationMs !== null ||
+      generationSegments.length > 0 ||
+      activeGenerationSegmentId ||
+      generationRangeError ||
+      generatedSubtitlePath ||
+      transcriptionProgressMessage ||
+      transcriptionProgressPercent !== null ||
+      transcriptionCommandLines.length > 0 ||
+      generationStatusMessage,
+  );
+  const canClearTranslation = Boolean(
+    subtitleTranslationPath ||
+      subtitleTranslationOutputPath ||
+      subtitleTranslationProgressMessage ||
+      subtitleTranslationProgressPercent !== null ||
+      subtitleTranslationStatusMessage ||
+      subtitleTranslationConnectionStatus !== "idle" ||
+      subtitleTranslationConnectionError,
+  );
   const getPanelState = (toolId: SubtitleToolId) =>
     activeTool === toolId ? "active" : "inactive";
   const renderToolTab = (tool: {
@@ -637,7 +668,7 @@ export const SubtitleMuxPageContent = ({
         onClick={() => onChangeActiveTool(tool.id)}
         className={`flex h-9 shrink-0 items-center gap-2 rounded-[7px] px-2.5 text-left text-[length:var(--font-size-control)] leading-[var(--line-height-control)] transition-colors focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-[var(--control-accent)] md:w-full ${
           isActive
-            ? "bg-[var(--control-fill-active)] text-foreground"
+            ? "bg-[var(--brand-500)] text-[var(--neutral-950)]"
             : "text-muted-foreground hover:bg-[var(--result-row-hover)] hover:text-foreground"
         }`}
       >
@@ -665,6 +696,17 @@ export const SubtitleMuxPageContent = ({
         contentClassName="px-0 py-1 md:pl-1"
         rail={
           <>
+            <div
+              data-subtitle-duck-brand="true"
+              className="mb-4 hidden justify-center pt-1 md:flex"
+            >
+              <img
+                src={subtitleDuckIconUrl}
+                alt="字幕鸭"
+                draggable={false}
+                className="size-[76px] select-none rounded-[18px] shadow-[0_12px_28px_-18px_rgba(0,0,0,0.8)]"
+              />
+            </div>
             <nav
               data-subtitle-tool-nav="true"
               role="tablist"
@@ -679,7 +721,7 @@ export const SubtitleMuxPageContent = ({
                   ffmpegUnavailable ? "unavailable" : "available"
                 }
                 title={ffmpegStatusTitle || undefined}
-                className={`flex cursor-pointer list-none items-center gap-1.5 rounded-[var(--control-radius-sm)] px-1.5 py-1 text-[length:var(--font-size-caption)] outline-none transition-colors hover:bg-[var(--result-row-hover)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)] [&::-webkit-details-marker]:hidden ${
+                className={`flex cursor-pointer list-none items-center gap-1.5 rounded-[var(--control-radius-sm)] px-1.5 py-1 text-[length:var(--font-size-caption)] outline-none transition-colors hover:bg-[var(--detail-secondary-action-hover-bg)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)] [&::-webkit-details-marker]:hidden ${
                   ffmpegUnavailable
                     ? "text-[var(--status-error-text)]"
                     : "text-muted-foreground"
@@ -688,7 +730,7 @@ export const SubtitleMuxPageContent = ({
                 {ffmpegUnavailable ? (
                   <AlertCircle className="size-3.5 shrink-0" />
                 ) : (
-                  <CircleCheck className="size-3.5 shrink-0 text-[var(--status-success-text)]" />
+                  <CircleCheck className="size-3.5 shrink-0 text-[var(--brand-500)]" />
                 )}
                 <span className="min-w-0 truncate">{ffmpegStatusShortLabel}</span>
               </summary>
@@ -825,6 +867,14 @@ export const SubtitleMuxPageContent = ({
         >
           <div className="mx-auto grid w-full max-w-[900px] gap-4">
             <div className="flex justify-end gap-2">
+              <ToolbarButton
+                darkMode={darkMode}
+                onClick={onClearGeneration}
+                disabled={!canClearGeneration || isGenerating}
+                className="bg-transparent text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
+              >
+                清空
+              </ToolbarButton>
               {isGenerating ? (
                 <ToolbarButton
                   darkMode={darkMode}
@@ -1368,6 +1418,14 @@ export const SubtitleMuxPageContent = ({
             className="relative mx-auto grid w-full max-w-[900px] gap-0 px-1"
           >
             <div className="mb-4 flex justify-end gap-2">
+              <ToolbarButton
+                darkMode={darkMode}
+                onClick={onClearTranslation}
+                disabled={!canClearTranslation || isTranslatingSubtitle}
+                className="bg-transparent text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
+              >
+                清空
+              </ToolbarButton>
               {translationIsComplete ? (
                 <ToolbarButton
                   darkMode={darkMode}
@@ -1589,7 +1647,7 @@ export const SubtitleMuxPageContent = ({
                   <div
                     className={`flex items-center gap-2 text-[length:var(--font-size-caption)] ${
                       subtitleTranslationStatusTone === "success"
-                        ? "text-emerald-600 dark:text-emerald-400"
+                        ? "text-[var(--status-success-text)]"
                         : "text-destructive"
                     }`}
                   >
@@ -1606,7 +1664,7 @@ export const SubtitleMuxPageContent = ({
           </div>
           {subtitleTranslationConnectionStatus === "unavailable" ? (
             <div className="mx-auto mt-7 w-full max-w-[900px] px-1 text-[length:var(--font-size-caption)]">
-              <div className="rounded-2xl bg-white/[0.035] px-4 py-3.5 shadow-[inset_2px_0_0_rgb(127_100_150_/_0.7)]">
+              <div className="rounded-2xl bg-white/[0.035] px-4 py-3.5 shadow-[inset_2px_0_0_var(--subtitle-accent-border)]">
                 <div className="flex items-center gap-2">
                 <CircleX className="size-3.5 text-destructive" />
                   <span className="text-destructive">连接需要代理或重试</span>

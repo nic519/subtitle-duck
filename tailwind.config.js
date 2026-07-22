@@ -50,11 +50,11 @@ export default {
           foreground: colorVariable("--card-foreground"),
         },
         brand: {
-          50: '#f0f4ff',
-          100: '#e0e9ff',
-          500: '#667eea',
-          600: '#5568d3',
-          700: '#764ba2',
+          50: '#fff8e8',
+          100: '#ffedc2',
+          500: '#ffa31a',
+          600: '#e88900',
+          700: '#bd6800',
         },
       },
       borderRadius: {
@@ -70,9 +70,6 @@ export default {
   },
   plugins: [],
 }
-
-
-
 
 
 

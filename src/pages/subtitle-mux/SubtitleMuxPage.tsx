@@ -1255,6 +1255,32 @@ export const SubtitleMuxPage = ({
     }
   };
 
+  const handleClearGeneration = () => {
+    desktopApi.clearCompletedWhisperTranscriptionTask();
+    generationVideoLoadIdRef.current = crypto.randomUUID();
+    setGenerationVideoPath(null);
+    setGenerationVideoPreviewUrl(null);
+    setGenerationDurationMs(null);
+    setGenerationSegments([]);
+    setActiveGenerationSegmentId(null);
+    setGenerationRangeError(null);
+    generationSegmentCounterRef.current = 0;
+    setGeneratedSubtitlePath(null);
+    setTranscriptionProgressMessage(null);
+    setTranscriptionProgressPercent(null);
+    setTranscriptionCommandLines([]);
+    setGenerationStatus({ tone: "neutral", message: null });
+  };
+
+  const handleClearTranslation = () => {
+    setSubtitleTranslationPath(null);
+    setTranslatedSubtitlePath(null);
+    setSubtitleTranslationProgress({ message: null, percent: null });
+    setSubtitleTranslationStatus({ tone: "neutral", message: null });
+    setSubtitleTranslationConnectionStatus("idle");
+    setSubtitleTranslationConnectionError(null);
+  };
+
   const handleRevealGeneratedSubtitle = async () => {
     if (!generatedSubtitlePath) return;
     try {
@@ -1409,6 +1435,8 @@ export const SubtitleMuxPage = ({
           setProgressMessage(null);
           setMergeStatus({ tone: "neutral", message: null });
         }}
+        onClearGeneration={handleClearGeneration}
+        onClearTranslation={handleClearTranslation}
         onRevealOutput={() => void handleRevealOutput()}
       />
     </div>
