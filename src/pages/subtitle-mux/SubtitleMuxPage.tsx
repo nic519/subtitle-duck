@@ -422,13 +422,12 @@ export const SubtitleMuxPage = ({
     generationSegmentCounterRef.current = restoredSegments.length;
     setGenerationVideoPreviewUrl(null);
     setTranscriptionCommandLines(task.commandLines);
-    setTranscriptionProgressMessage(
-      progress?.message ??
-        (task.status === "running" ? "正在生成字幕" : null)
-    );
+    setTranscriptionProgressMessage(progress?.message ?? null);
     setTranscriptionProgressPercent(
-      progress?.phase === "transcribing" && typeof progress.percent === "number"
-        ? progress.percent
+      typeof progress?.overallPercent === "number"
+        ? progress.overallPercent
+        : progress?.phase === "transcribing" && typeof progress.percent === "number"
+          ? progress.percent
         : progress?.phase === "completed"
           ? 100
           : null
@@ -438,7 +437,7 @@ export const SubtitleMuxPage = ({
       setIsGenerating(true);
       setIsCancelingGeneration(false);
       setGeneratedSubtitlePath(null);
-      setGenerationStatus({ tone: "neutral", message: "正在生成字幕" });
+      setGenerationStatus({ tone: "neutral", message: null });
     } else if (task.status === "completed") {
       const summary =
         progress?.message ??
@@ -487,13 +486,12 @@ export const SubtitleMuxPage = ({
 
       const { progress } = task;
       setTranscriptionCommandLines(task.commandLines);
-      setTranscriptionProgressMessage(
-        progress?.message ??
-          (task.status === "running" ? "正在生成字幕" : null)
-      );
+      setTranscriptionProgressMessage(progress?.message ?? null);
       setTranscriptionProgressPercent(
-        progress?.phase === "transcribing" && typeof progress.percent === "number"
-          ? progress.percent
+        typeof progress?.overallPercent === "number"
+          ? progress.overallPercent
+          : progress?.phase === "transcribing" && typeof progress.percent === "number"
+            ? progress.percent
           : progress?.phase === "completed"
             ? 100
             : null
@@ -502,7 +500,7 @@ export const SubtitleMuxPage = ({
       if (task.status === "running") {
         setIsGenerating(true);
         setIsCancelingGeneration(false);
-        setGenerationStatus({ tone: "neutral", message: "正在生成字幕" });
+        setGenerationStatus({ tone: "neutral", message: null });
         return;
       }
 
@@ -832,7 +830,7 @@ export const SubtitleMuxPage = ({
     setTranscriptionProgressMessage("准备生成字幕");
     setTranscriptionProgressPercent(0);
     setTranscriptionCommandLines([]);
-    setGenerationStatus({ tone: "neutral", message: "正在生成字幕" });
+    setGenerationStatus({ tone: "neutral", message: null });
     try {
       const result = await desktopApi.transcribeVideoSubtitle(
         {
@@ -843,12 +841,15 @@ export const SubtitleMuxPage = ({
         },
         (progress) => {
           setTranscriptionProgressMessage(progress.message);
-          setTranscriptionProgressPercent(
-            progress.phase === "transcribing" && typeof progress.percent === "number"
-              ? progress.percent
-              : progress.phase === "completed"
-                ? 100
-                : null
+          setTranscriptionProgressPercent((current) =>
+            typeof progress.overallPercent === "number"
+              ? progress.overallPercent
+              : progress.phase === "transcribing" &&
+                  typeof progress.percent === "number"
+                ? progress.percent
+                : progress.phase === "completed"
+                  ? 100
+                  : current,
           );
           if (progress.phase === "command") {
             setTranscriptionCommandLines((current) =>

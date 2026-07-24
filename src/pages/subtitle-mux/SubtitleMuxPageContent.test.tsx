@@ -12,6 +12,7 @@ describe("subtitle generation progress", () => {
     );
 
     expect(html).toContain('role="progressbar"');
+    expect(html).toContain('aria-label="字幕生成总体进度"');
     expect(html).toContain('aria-valuenow="42"');
     expect(html).toContain("h-px");
     expect(html).toContain("width:42%");

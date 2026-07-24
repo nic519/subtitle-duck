@@ -322,11 +322,12 @@ export const SubtitleTranscriptionProgress = ({
     <div
       data-subtitle-tool-transcription-progress
       role="progressbar"
-      aria-label="字幕生成进度"
+      aria-label="字幕生成总体进度"
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={normalizedPercent}
-      className="h-px shrink-0 overflow-hidden bg-[var(--control-fill)]"
+      title={`字幕生成总体进度 ${Math.round(normalizedPercent)}%`}
+      className="sticky top-0 z-10 h-px shrink-0 overflow-hidden bg-[var(--control-fill)]"
     >
       <div
         className="subtitle-accent-progress h-full transition-[width] duration-300 motion-reduce:transition-none"
@@ -696,9 +697,6 @@ export const SubtitleMuxPageContent = ({
 
   return (
     <ToastProvider duration={2200}>
-      {activeTool === "generate" && transcriptionProgressPercent !== null ? (
-        <SubtitleTranscriptionProgress percent={transcriptionProgressPercent} />
-      ) : null}
       <FixedRailLayout
         viewportClassName="px-4 pb-4 pt-3"
         gridProps={{ "data-subtitle-mux-layout": "tools" }}
@@ -796,6 +794,9 @@ export const SubtitleMuxPageContent = ({
           </>
         }
       >
+        {activeTool === "generate" && transcriptionProgressPercent !== null ? (
+          <SubtitleTranscriptionProgress percent={transcriptionProgressPercent} />
+        ) : null}
         <section
           id="subtitle-tool-panel-merge"
           role="tabpanel"

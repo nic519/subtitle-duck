@@ -24,9 +24,31 @@ export type WhisperTranscriptionProgress = (
   | { phase: "range-failed"; error: string; message: string }
   | { phase: "completed"; message: string }
 ) & {
+  overallPercent?: number;
   rangeIndex?: number;
   rangeTotal?: number;
   range?: WhisperTimeRange;
+};
+
+export const getOverallTranscriptionPercent = ({
+  completedDurationMs,
+  currentDurationMs,
+  totalDurationMs,
+  currentPercent,
+}: {
+  completedDurationMs: number;
+  currentDurationMs: number;
+  totalDurationMs: number;
+  currentPercent: number;
+}): number => {
+  if (totalDurationMs <= 0) return 0;
+  const normalizedCurrentPercent = Math.min(100, Math.max(0, currentPercent));
+  const processedDurationMs =
+    completedDurationMs + currentDurationMs * (normalizedCurrentPercent / 100);
+  return Math.min(
+    100,
+    Math.max(0, Math.round((processedDurationMs / totalDurationMs) * 100)),
+  );
 };
 
 export interface WhisperTranscriptionRequest {
@@ -464,6 +486,12 @@ export const transcribeVideoSubtitle = async (
     ? splitWhisperRangeIntoChunks(range, deps.chunkDurationMs)
     : [undefined];
   const shouldMergeSegments = segmentRanges.length > 1;
+  const totalSegmentDurationMs = segmentRanges.reduce(
+    (total, segmentRange) =>
+      total +
+      (segmentRange ? segmentRange.endMs - segmentRange.startMs : 0),
+    0,
+  );
 
   if (!checkExists(input.videoPath)) {
     throw new Error(`视频文件不存在: ${input.videoPath}`);
@@ -539,6 +567,16 @@ export const transcribeVideoSubtitle = async (
         command: formatCommandForDisplay(whisperCommand),
         message: "正在执行 Faster Whisper 识别命令",
       });
+      const completedSegmentDurationMs = segmentRanges
+        .slice(0, segmentIndex)
+        .reduce(
+          (total, completedRange) =>
+            total +
+            (completedRange
+              ? completedRange.endMs - completedRange.startMs
+              : 0),
+          0,
+        );
       const onSegmentProgress = (progress: WhisperTranscriptionProgress) => {
         if (
           segmentTotal <= 1 ||
@@ -549,9 +587,14 @@ export const transcribeVideoSubtitle = async (
           return;
         }
 
-        const percent = Math.round(
-          ((segmentIndex + progress.percent / 100) / segmentTotal) * 100
-        );
+        const percent = getOverallTranscriptionPercent({
+          completedDurationMs: completedSegmentDurationMs,
+          currentDurationMs: segmentRange
+            ? segmentRange.endMs - segmentRange.startMs
+            : 0,
+          totalDurationMs: totalSegmentDurationMs,
+          currentPercent: progress.percent,
+        });
         deps.onProgress?.({
           ...progress,
           percent,
@@ -643,12 +686,23 @@ export const transcribeVideoSubtitleRanges = async (
   const successfulSrtSegments: Array<{ content: string; offsetMs: number }> = [];
   const completedRanges: WhisperTimeRange[] = [];
   const failedRanges: Array<{ range: WhisperTimeRange; error: string }> = [];
+  const totalRangeDurationMs = ranges.reduce(
+    (total, range) => total + (range.endMs - range.startMs),
+    0,
+  );
   let interruptedRange: WhisperTimeRange | null = null;
   let pendingRanges: WhisperTimeRange[] = [];
   let stopped = false;
 
   for (const [rangeIndex, range] of ranges.entries()) {
     const rangeNumber = rangeIndex + 1;
+    const completedRangeDurationMs = ranges
+      .slice(0, rangeIndex)
+      .reduce(
+        (total, completedRange) =>
+          total + completedRange.endMs - completedRange.startMs,
+        0,
+      );
     const rangeOutputPath =
       deps.makeTempOutputPath?.(rangeNumber) ??
       join(
@@ -667,19 +721,22 @@ export const transcribeVideoSubtitleRanges = async (
           abortSignal: deps.abortSignal,
           resolveExecutable: deps.resolveExecutable,
           onProgress: (progress) => {
-            const overallPercent =
+            const currentPercent =
               progress.phase === "transcribing" &&
               typeof progress.percent === "number"
-                ? Math.round(
-                    ((rangeIndex + progress.percent / 100) / ranges.length) *
-                      100
-                  )
-                : undefined;
+                ? progress.percent
+                : progress.phase === "completed"
+                  ? 100
+                  : 0;
+            const overallPercent = getOverallTranscriptionPercent({
+              completedDurationMs: completedRangeDurationMs,
+              currentDurationMs: range.endMs - range.startMs,
+              totalDurationMs: totalRangeDurationMs,
+              currentPercent,
+            });
             deps.onProgress?.({
               ...progress,
-              ...(overallPercent === undefined
-                ? {}
-                : { percent: overallPercent }),
+              overallPercent,
               rangeIndex: rangeNumber,
               rangeTotal: ranges.length,
               range,
@@ -706,6 +763,12 @@ export const transcribeVideoSubtitleRanges = async (
         phase: "range-failed",
         error: message,
         message: `片段 ${rangeNumber}/${ranges.length} 识别失败：${message}`,
+        overallPercent: getOverallTranscriptionPercent({
+          completedDurationMs: completedRangeDurationMs,
+          currentDurationMs: range.endMs - range.startMs,
+          totalDurationMs: totalRangeDurationMs,
+          currentPercent: 100,
+        }),
         rangeIndex: rangeNumber,
         rangeTotal: ranges.length,
         range,
@@ -727,6 +790,7 @@ export const transcribeVideoSubtitleRanges = async (
 
   deps.onProgress?.({
     phase: "completed",
+    overallPercent: 100,
     message: stopped
       ? `字幕生成已停止，已保留 ${completedRanges.length} 个片段`
       : `字幕已生成，成功 ${completedRanges.length} 个片段，失败 ${failedRanges.length} 个片段`,
