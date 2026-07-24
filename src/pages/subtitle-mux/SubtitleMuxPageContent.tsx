@@ -311,6 +311,55 @@ const InstallCommand = ({ children }: { children: string }) => (
   </code>
 );
 
+export const SubtitleTranscriptionProgress = ({
+  percent,
+}: {
+  percent: number;
+}) => {
+  const normalizedPercent = Math.min(100, Math.max(0, percent));
+
+  return (
+    <div
+      data-subtitle-tool-transcription-progress
+      role="progressbar"
+      aria-label="字幕生成进度"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={normalizedPercent}
+      className="h-px shrink-0 overflow-hidden bg-[var(--control-fill)]"
+    >
+      <div
+        className="subtitle-accent-progress h-full transition-[width] duration-300 motion-reduce:transition-none"
+        style={{ width: `${normalizedPercent}%` }}
+      />
+    </div>
+  );
+};
+
+export const TranscriptionCommands = ({ commands }: { commands: string[] }) => (
+  <details
+    data-subtitle-tool-transcription-commands
+    className="subtitle-accent-line border-t pt-3"
+  >
+    <summary className="cursor-pointer list-none text-[length:var(--font-size-caption)] text-muted-foreground marker:hidden [&::-webkit-details-marker]:hidden">
+      <span className="inline-flex items-center gap-1.5">
+        <Terminal className="size-3.5" aria-hidden="true" />
+        执行命令
+      </span>
+    </summary>
+    <div className="mt-2 grid gap-1.5">
+      {commands.map((command) => (
+        <pre
+          key={command}
+          className="custom-scrollbar overflow-x-auto whitespace-pre-wrap break-all rounded-[6px] border border-[var(--result-divider)] bg-background/70 px-2 py-1.5 text-[length:var(--font-size-caption)] text-foreground"
+        >
+          <code>{command}</code>
+        </pre>
+      ))}
+    </div>
+  </details>
+);
+
 const DependencyGuide = ({
   title,
   description,
@@ -647,6 +696,9 @@ export const SubtitleMuxPageContent = ({
 
   return (
     <ToastProvider duration={2200}>
+      {activeTool === "generate" && transcriptionProgressPercent !== null ? (
+        <SubtitleTranscriptionProgress percent={transcriptionProgressPercent} />
+      ) : null}
       <FixedRailLayout
         viewportClassName="px-4 pb-4 pt-3"
         gridProps={{ "data-subtitle-mux-layout": "tools" }}
@@ -1150,48 +1202,8 @@ export const SubtitleMuxPageContent = ({
               </div>
             ) : null}
 
-            {transcriptionProgressPercent !== null ? (
-              <div
-                data-subtitle-tool-transcription-progress
-                role="progressbar"
-                aria-label="字幕生成进度"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={transcriptionProgressPercent}
-                className="grid gap-1.5"
-              >
-                <div className="flex items-center justify-between text-[length:var(--font-size-caption)] text-muted-foreground">
-                  <span>识别进度</span>
-                  <span>{transcriptionProgressPercent}%</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--control-fill)]">
-                  <div
-                    className="h-full rounded-full bg-[var(--subtitle-accent-muted)] transition-[width] duration-300 motion-reduce:transition-none"
-                    style={{ width: `${transcriptionProgressPercent}%` }}
-                  />
-                </div>
-              </div>
-            ) : null}
-
             {transcriptionCommandLines.length > 0 ? (
-              <div
-                data-subtitle-tool-transcription-commands
-                className="subtitle-accent-line grid gap-1.5 border-t pt-3"
-              >
-                <div className="text-[length:var(--font-size-caption)] text-muted-foreground">
-                  执行命令
-                </div>
-                <div className="grid gap-1.5">
-                  {transcriptionCommandLines.map((command) => (
-                    <pre
-                      key={command}
-                      className="custom-scrollbar overflow-x-auto whitespace-pre-wrap break-all rounded-[6px] border border-[var(--result-divider)] bg-background/70 px-2 py-1.5 text-[length:var(--font-size-caption)] text-foreground"
-                    >
-                      <code>{command}</code>
-                    </pre>
-                  ))}
-                </div>
-              </div>
+              <TranscriptionCommands commands={transcriptionCommandLines} />
             ) : null}
 
             {generatedSubtitlePath ? (
