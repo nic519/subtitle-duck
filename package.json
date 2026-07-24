@@ -11,6 +11,8 @@
     "build:stable": "bun run build && bun run prepare:native-file-drop && electrobun build --env=stable",
     "preview": "vite preview",
     "build:desktop": "bun run build && bun run prepare:native-file-drop && electrobun build",
+    "build:mac:local": "bun scripts/assert-platform.ts macos && bun run build && bun run prepare:native-file-drop && electrobun build --env=dev",
+    "verify:mac:local": "bun scripts/verify-macos-local-app.ts",
     "package:mac": "bun scripts/assert-platform.ts macos && bun run build:stable && bun scripts/package-macos-app.ts stable",
     "package:windows": "bun scripts/assert-platform.ts windows && bun run build:stable",
     "test": "bun test",

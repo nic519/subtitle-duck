@@ -179,6 +179,9 @@ mainWindow = new BrowserWindow({
   renderer: "native",
   rpc,
 });
+if (Bun.env.SUBTITLE_DUCK_VERIFY_LOCAL_APP === "1") {
+  console.log("[subtitle-duck] BrowserWindow created");
+}
 
 process.once("exit", () => {
   activeTranscriptions.forEach((controller) => controller.abort());
