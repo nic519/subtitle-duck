@@ -1,7 +1,7 @@
 import { useState, type DragEventHandler } from "react";
 import { FileVideo, FolderOpen, Languages, Plus } from "lucide-react";
 import { ToolbarButton } from "@/components/page-ui";
-import { resolveLocalFileDrop } from "@/desktop/file-drop/localFileInput";
+import { resolveLocalFileImport } from "@/local-file-import/localFileImport";
 
 const getFileName = (path: string | null) =>
   path?.split(/[\\/]/).filter(Boolean).at(-1) ?? null;
@@ -100,9 +100,7 @@ export const SubtitleMergeDropzone = ({
     event.preventDefault();
     event.stopPropagation();
     setIsDragActive(false);
-    void resolveLocalFileDrop(event.dataTransfer)
-      .then(onDropPaths)
-      .catch(() => onDropPaths([]));
+    void resolveLocalFileImport(event.dataTransfer).then(onDropPaths);
   };
 
   return (

@@ -3,52 +3,60 @@ type PendingConsumer = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-const waitTimeoutMs = 1_500;
-const queuedDropMaxAgeMs = 2_000;
+export const createLocalFileDropBroker = ({
+  waitTimeoutMs = 1_500,
+  queuedDropMaxAgeMs = 2_000,
+  replacementDelayMs = 25,
+  now = Date.now,
+}: {
+  waitTimeoutMs?: number;
+  queuedDropMaxAgeMs?: number;
+  replacementDelayMs?: number;
+  now?: () => number;
+} = {}) => {
+  let queuedDrops: Array<{ paths: string[]; receivedAt: number }> = [];
+  const pendingConsumers: PendingConsumer[] = [];
 
-export const createLocalFileDropBroker = () => {
-  let queuedDrop: { paths: string[]; receivedAt: number } | null = null;
-  let pendingConsumer: PendingConsumer | null = null;
+  const settle = (pending: PendingConsumer, paths: string[]) => {
+    clearTimeout(pending.timer);
+    const index = pendingConsumers.indexOf(pending);
+    if (index >= 0) pendingConsumers.splice(index, 1);
+    pending.resolve(paths);
+  };
+
+  const waitForReplacement = (
+    candidatePaths: string[],
+    timeoutMs: number,
+  ): Promise<string[]> =>
+    new Promise((resolve) => {
+      const pending = {} as PendingConsumer;
+      pending.resolve = resolve;
+      pending.timer = setTimeout(
+        () => settle(pending, candidatePaths),
+        timeoutMs,
+      );
+      pendingConsumers.push(pending);
+    });
 
   const publish = (paths: string[]): void => {
     if (paths.length === 0) return;
-    if (pendingConsumer) {
-      clearTimeout(pendingConsumer.timer);
-      pendingConsumer.resolve(paths);
-      pendingConsumer = null;
+    const pending = pendingConsumers[0];
+    if (pending) {
+      settle(pending, paths);
       return;
     }
-    queuedDrop = { paths, receivedAt: Date.now() };
+    queuedDrops.push({ paths, receivedAt: now() });
   };
 
   const consume = (): Promise<string[]> => {
-    if (
-      queuedDrop &&
-      Date.now() - queuedDrop.receivedAt <= queuedDropMaxAgeMs
-    ) {
-      const candidatePaths = queuedDrop.paths;
-      queuedDrop = null;
-      return new Promise((resolve) => {
-        pendingConsumer = {
-          resolve,
-          timer: setTimeout(() => {
-            pendingConsumer = null;
-            resolve(candidatePaths);
-          }, 25),
-        };
-      });
-    }
-    queuedDrop = null;
-
-    return new Promise((resolve) => {
-      pendingConsumer = {
-        resolve,
-        timer: setTimeout(() => {
-          pendingConsumer = null;
-          resolve([]);
-        }, waitTimeoutMs),
-      };
-    });
+    queuedDrops = queuedDrops.filter(
+      (drop) => now() - drop.receivedAt <= queuedDropMaxAgeMs,
+    );
+    const candidate = queuedDrops.shift();
+    return waitForReplacement(
+      candidate?.paths ?? [],
+      candidate ? replacementDelayMs : waitTimeoutMs,
+    );
   };
 
   return { publish, consume };

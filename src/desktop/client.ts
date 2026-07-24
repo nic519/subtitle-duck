@@ -7,12 +7,8 @@ import type {
 } from "./rpcTypes";
 import type { SubtitleMuxProgress } from "./subtitles/subtitleMux";
 import {
-  completeWhisperTranscriptionTask,
-  failWhisperTranscriptionTask,
-  startWhisperTranscriptionTask,
-  updateWhisperTranscriptionTask,
-  type WhisperTranscriptionTaskState,
-} from "../subtitle-mux/transcriptionTaskState";
+  createSubtitleGenerationTaskSession,
+} from "../subtitle-mux/subtitleGenerationTaskSession";
 import type { WhisperTimeRange } from "./transcription/whisperTranscription";
 
 const isElectrobun = Boolean(window.__electrobun);
@@ -21,13 +17,6 @@ type Listener<T> = (value: T) => void;
 const muxListeners = new Set<Listener<SubtitleMuxProgress>>();
 const translationListeners = new Set<Listener<SubtitleTranslationProgressEvent>>();
 const transcriptionListeners = new Set<Listener<WhisperTranscriptionProgressEvent>>();
-const taskListeners = new Set<Listener<WhisperTranscriptionTaskState | null>>();
-let currentTask: WhisperTranscriptionTaskState | null = null;
-
-const setTask = (task: WhisperTranscriptionTaskState | null) => {
-  currentTask = task;
-  taskListeners.forEach((listener) => listener(task));
-};
 
 const rpc = isElectrobun
   ? Electroview.defineRPC<DesktopRPC>({
@@ -54,6 +43,25 @@ const browserConfigSet = (key: string, value: string) => {
   return value;
 };
 
+const subtitleGenerationTaskSession = createSubtitleGenerationTaskSession({
+  async run(input, onProgress) {
+    if (!electrobun) return unavailable("生成本地字幕");
+    const listener = (progress: WhisperTranscriptionProgressEvent) => {
+      if (progress.videoPath === input.videoPath) onProgress(progress);
+    };
+    transcriptionListeners.add(listener);
+    try {
+      return await electrobun.rpc.request.transcribeVideoSubtitle(input);
+    } finally {
+      transcriptionListeners.delete(listener);
+    }
+  },
+  async cancel(input) {
+    if (!electrobun) return unavailable("停止字幕生成");
+    await electrobun.rpc.request.cancelTranscribeVideoSubtitle(input);
+  },
+});
+
 export const desktopApi = {
   isDesktop: isElectrobun,
   configGet: (key: string) => electrobun?.rpc.request.configGet({ key }) ?? Promise.resolve(browserConfigGet(key)),
@@ -79,33 +87,15 @@ export const desktopApi = {
     muxListeners.add(listener);
     return () => { muxListeners.delete(listener); };
   },
-  async transcribeVideoSubtitle(input: { videoPath: string; ranges: WhisperTimeRange[]; durationMs: number; language: string }, onProgress?: Listener<WhisperTranscriptionProgressEvent>) {
-    if (!electrobun) return unavailable("生成本地字幕");
-    setTask(startWhisperTranscriptionTask(input));
-    const unsubscribe = this.onWhisperTranscriptionProgress((progress) => {
-      if (progress.videoPath !== input.videoPath) return;
-      if (currentTask?.input === input) setTask(updateWhisperTranscriptionTask(currentTask, progress));
-      onProgress?.(progress);
-    });
-    try {
-      const result = await electrobun.rpc.request.transcribeVideoSubtitle(input);
-      if (currentTask?.input === input) setTask(completeWhisperTranscriptionTask(currentTask, result));
-      return result;
-    } catch (error) {
-      if (currentTask?.input === input) setTask(failWhisperTranscriptionTask(currentTask, error instanceof Error ? error.message : String(error)));
-      throw error;
-    } finally {
-      unsubscribe();
-    }
+  transcribeVideoSubtitle(input: { videoPath: string; ranges: WhisperTimeRange[]; durationMs: number; language: string }) {
+    return subtitleGenerationTaskSession.start(input);
   },
-  cancelTranscribeVideoSubtitle: (input: { videoPath: string }) => electrobun?.rpc.request.cancelTranscribeVideoSubtitle(input) ?? unavailable("停止字幕生成"),
-  getWhisperTranscriptionTask: () => currentTask,
-  onWhisperTranscriptionTaskChange(listener: Listener<WhisperTranscriptionTaskState | null>) {
-    taskListeners.add(listener);
-    return () => { taskListeners.delete(listener); };
-  },
+  cancelTranscribeVideoSubtitle: (_input: { videoPath: string }) =>
+    subtitleGenerationTaskSession.cancel(),
+  getWhisperTranscriptionTask: () => subtitleGenerationTaskSession.getSnapshot(),
+  onWhisperTranscriptionTaskChange: subtitleGenerationTaskSession.subscribe,
   clearCompletedWhisperTranscriptionTask() {
-    if (currentTask?.status !== "running") setTask(null);
+    subtitleGenerationTaskSession.clear();
   },
   async translateSubtitleFile(input: { subtitlePath: string; targetLanguage?: string | null; sourceLanguage?: string | null; maxBatchCharacters?: number | null }, onProgress?: Listener<SubtitleTranslationProgressEvent>) {
     if (!electrobun) return unavailable("翻译本地字幕");

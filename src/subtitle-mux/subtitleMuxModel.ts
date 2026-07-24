@@ -1,5 +1,3 @@
-import { extractLocalDropPaths } from "../utils/dropPaths";
-
 const VIDEO_EXTENSIONS = new Set([
   ".mp4",
   ".mkv",
@@ -54,20 +52,6 @@ const hasSupportedExtension = (
 export const buildSubtitleMuxOutputPath = (videoPath: string): string => {
   const { directory, separator, baseName } = getPathParts(videoPath);
   return `${directory}${separator}${baseName}.muxed.mkv`;
-};
-
-export const extractSubtitleMuxDropPaths = ({
-  filePaths,
-  uriList,
-  plainText,
-  fallbackText,
-}: {
-  filePaths: string[];
-  uriList: string;
-  plainText: string;
-  fallbackText?: string[];
-}): string[] => {
-  return extractLocalDropPaths({ filePaths, uriList, plainText, fallbackText });
 };
 
 const getSubtitleMuxPathGroups = (rawPaths: string[]) => {

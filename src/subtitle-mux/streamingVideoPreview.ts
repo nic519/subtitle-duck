@@ -7,9 +7,6 @@ export const buildStreamingPreviewSeekUrl = (
   return url.toString();
 };
 
-export const isStreamingPreviewUrl = (previewUrl: string | null): boolean =>
-  Boolean(previewUrl?.includes("/stream/"));
-
 const streamingPreviewMimeType =
   'video/mp4; codecs="avc1.42C01E, mp4a.40.2"';
 

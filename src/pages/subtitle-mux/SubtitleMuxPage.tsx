@@ -11,21 +11,18 @@ import {
   type SubtitleGenerationSegment,
 } from "../../subtitle-mux/subtitleGenerationSegments";
 import {
-  formatSubtitleRangeTime,
-} from "../../subtitle-mux/subtitleGenerationRange";
-import {
   mergeSubtitleMuxDraftWithDropPaths,
   type SubtitleMuxDraft,
 } from "../../subtitle-mux/subtitleMuxModel";
-import { buildSubtitleTranslationOutputPath } from "../../subtitle-mux/subtitleTranslation";
+import { createSubtitleTranslationSession } from "../../subtitle-mux/subtitleTranslationSession";
+import {
+  createVideoPreviewSession,
+  type VideoPreviewSource,
+} from "../../subtitle-mux/videoPreviewSession";
 import {
   addSuccessfulFasterWhisperModel,
   parseFasterWhisperModelHistory,
 } from "../../subtitle-mux/fasterWhisperModelHistory";
-import {
-  updateSubtitleTranslationUiState,
-  type SubtitleTranslationUiAction,
-} from "../../subtitle-mux/subtitleTranslationUiState";
 import { revealInFolder } from "../../utils/fileUtils";
 import {
   SubtitleMuxPageContent,
@@ -47,12 +44,6 @@ const isSubtitleToolId = (value: string | null): value is SubtitleToolId =>
   value === "merge" ||
   value === "generate" ||
   value === "translate";
-
-const formatGenerationRange = (range: {
-  startMs: number;
-  endMs: number;
-}): string =>
-  `${formatSubtitleRangeTime(range.startMs)}–${formatSubtitleRangeTime(range.endMs)}`;
 
 type FfmpegStatus = {
   available: boolean;
@@ -79,17 +70,12 @@ export const SubtitleMuxPage = ({
   const [draft, setDraft] = useState<SubtitleMuxDraft>(EMPTY_DRAFT);
   const [isMerging, setIsMerging] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isTranslatingSubtitle, setIsTranslatingSubtitle] = useState(false);
   const [isCancelingGeneration, setIsCancelingGeneration] = useState(false);
   const [mergeStatus, setMergeStatus] = useState<{
     tone: "neutral" | "success" | "error";
     message: string | null;
   }>({ tone: "neutral", message: null });
   const [generationStatus, setGenerationStatus] = useState<{
-    tone: "neutral" | "success" | "error";
-    message: string | null;
-  }>({ tone: "neutral", message: null });
-  const [subtitleTranslationStatus, setSubtitleTranslationStatus] = useState<{
     tone: "neutral" | "success" | "error";
     message: string | null;
   }>({ tone: "neutral", message: null });
@@ -106,27 +92,9 @@ export const SubtitleMuxPage = ({
   >([]);
   const [activeTool, setActiveTool] =
     useState<SubtitleToolId>(initialActiveTool);
-  const [subtitleTranslationTargetLanguage, setSubtitleTranslationTargetLanguage] =
-    useState("zh-CN");
-  const [
-    subtitleTranslationBatchCharacters,
-    setSubtitleTranslationBatchCharacters,
-  ] = useState(1500);
-  const [subtitleTranslationProxyUrl, setSubtitleTranslationProxyUrl] = useState("");
-  const [subtitleTranslationConnectionStatus, setSubtitleTranslationConnectionStatus] = useState<"idle" | "testing" | "available" | "unavailable">("idle");
-  const [subtitleTranslationConnectionError, setSubtitleTranslationConnectionError] = useState<string | null>(null);
-  const [subtitleTranslationPath, setSubtitleTranslationPath] =
-    useState<string | null>(null);
-  const [translatedSubtitlePath, setTranslatedSubtitlePath] =
-    useState<string | null>(null);
-  const [subtitleTranslationProgress, setSubtitleTranslationProgress] =
-    useState<{
-      message: string | null;
-      percent: number | null;
-    }>({ message: null, percent: null });
   const [generationVideoPath, setGenerationVideoPath] = useState<string | null>(null);
-  const [generationVideoPreviewUrl, setGenerationVideoPreviewUrl] =
-    useState<string | null>(null);
+  const [generationVideoPreview, setGenerationVideoPreview] =
+    useState<VideoPreviewSource | null>(null);
   const [generationDurationMs, setGenerationDurationMs] =
     useState<number | null>(null);
   const [generationSegments, setGenerationSegments] = useState<
@@ -148,8 +116,50 @@ export const SubtitleMuxPage = ({
   >([]);
   const [generatedSubtitlePath, setGeneratedSubtitlePath] =
     useState<string | null>(null);
-  const generationVideoLoadIdRef = useRef<string | null>(null);
   const generationSegmentCounterRef = useRef(0);
+  const videoPreviewSessionRef = useRef<
+    ReturnType<typeof createVideoPreviewSession> | null
+  >(null);
+  if (!videoPreviewSessionRef.current) {
+    videoPreviewSessionRef.current = createVideoPreviewSession({
+      probeDuration: async (videoPath) =>
+        (await desktopApi.getWhisperVideoDuration(videoPath)).durationMs,
+      getNativeSource: async (videoPath) =>
+        (await desktopApi.getLocalVideoPreviewUrl(videoPath)).url,
+      getStreamSource: async (videoPath) =>
+        (await desktopApi.getCompatibleVideoPreviewUrl(videoPath)).url,
+    });
+  }
+  const subtitleTranslationSessionRef = useRef<
+    ReturnType<typeof createSubtitleTranslationSession> | null
+  >(null);
+  if (!subtitleTranslationSessionRef.current) {
+    subtitleTranslationSessionRef.current = createSubtitleTranslationSession({
+      loadProxyUrl: () => desktopApi.configGet("subtitle_translation_proxy_url"),
+      saveProxyUrl: (value) =>
+        desktopApi.configSet("subtitle_translation_proxy_url", value),
+      testConnection: (proxyUrl) =>
+        desktopApi.testSubtitleTranslationConnection(proxyUrl),
+      translate: (input, onProgress) =>
+        desktopApi.translateSubtitleFile(input, onProgress),
+      cancel: (input) => desktopApi.cancelTranslateSubtitleFile(input),
+    });
+  }
+  const [subtitleTranslation, setSubtitleTranslation] = useState(
+    subtitleTranslationSessionRef.current.getSnapshot(),
+  );
+  const subtitleTranslationPath = subtitleTranslation.subtitlePath;
+  const subtitleTranslationTargetLanguage = subtitleTranslation.targetLanguage;
+  const subtitleTranslationBatchCharacters = subtitleTranslation.batchCharacters;
+  const subtitleTranslationProxyUrl = subtitleTranslation.proxyUrl;
+  const subtitleTranslationConnectionStatus = subtitleTranslation.connection.status;
+  const subtitleTranslationConnectionError = subtitleTranslation.connection.error;
+  const translatedSubtitlePath = subtitleTranslation.translatedPath;
+  const subtitleTranslationProgress = subtitleTranslation.progress;
+  const subtitleTranslationStatus = subtitleTranslation.presentation;
+  const isTranslatingSubtitle =
+    subtitleTranslation.status === "translating" ||
+    subtitleTranslation.status === "canceling";
 
   const canStart = useMemo(
     () =>
@@ -175,12 +185,7 @@ export const SubtitleMuxPage = ({
       !generationRangeError &&
       fasterWhisperStatus?.available !== false
   );
-  const subtitleTranslationOutputPath = subtitleTranslationPath
-    ? buildSubtitleTranslationOutputPath(
-        subtitleTranslationPath,
-        subtitleTranslationTargetLanguage
-      )
-    : translatedSubtitlePath;
+  const subtitleTranslationOutputPath = subtitleTranslation.expectedOutputPath;
 
   useEffect(() => {
     void Promise.all([
@@ -200,6 +205,22 @@ export const SubtitleMuxPage = ({
         });
       });
   }, []);
+
+  useEffect(() =>
+    videoPreviewSessionRef.current!.subscribe((preview) => {
+      setGenerationVideoPath(preview.videoPath);
+      setGenerationDurationMs(preview.durationMs);
+      setGenerationVideoPreview(preview.source);
+      if (preview.status === "error" && preview.error) {
+        setGenerationStatus({ tone: "error", message: preview.error });
+      } else if (preview.status === "ready" && preview.error) {
+        setGenerationStatus({
+          tone: "error",
+          message: `兼容预览生成失败：${preview.error}`,
+        });
+      }
+    }),
+  []);
 
   useEffect(() => {
     if (initialActiveTool !== "merge") {
@@ -271,31 +292,15 @@ export const SubtitleMuxPage = ({
   }, []);
 
   useEffect(() => {
-    void desktopApi.configGet("subtitle_translation_proxy_url").then((value) => {
-      setSubtitleTranslationProxyUrl(value?.trim() || "");
-    });
+    const session = subtitleTranslationSessionRef.current!;
+    const unsubscribe = session.subscribe(setSubtitleTranslation);
+    void session.initialize();
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
     if (activeTool !== "translate") return;
-    let disposed = false;
-    setSubtitleTranslationConnectionStatus("testing");
-    setSubtitleTranslationConnectionError(null);
-    void desktopApi.testSubtitleTranslationConnection().then(
-      (result) => {
-        if (disposed) return;
-        setSubtitleTranslationConnectionStatus(result.available ? "available" : "unavailable");
-        setSubtitleTranslationConnectionError(result.error);
-      },
-      (error) => {
-        if (disposed) return;
-        setSubtitleTranslationConnectionStatus("unavailable");
-        setSubtitleTranslationConnectionError(error instanceof Error ? error.message : String(error));
-      },
-    );
-    return () => {
-      disposed = true;
-    };
+    void subtitleTranslationSessionRef.current!.testConnection().catch(() => undefined);
   }, [activeTool]);
 
   useEffect(() => {
@@ -342,11 +347,9 @@ export const SubtitleMuxPage = ({
     const trimmedPath = path.trim();
     if (!trimmedPath) return;
     desktopApi.clearCompletedWhisperTranscriptionTask();
-    const loadId = crypto.randomUUID();
-    generationVideoLoadIdRef.current = loadId;
 
     setGenerationVideoPath(trimmedPath);
-    setGenerationVideoPreviewUrl(null);
+    setGenerationVideoPreview(null);
     setGenerationDurationMs(null);
     setGenerationSegments([]);
     setActiveGenerationSegmentId(null);
@@ -360,40 +363,20 @@ export const SubtitleMuxPage = ({
     setGenerationStatus({ tone: "neutral", message: null });
 
     try {
-      const [{ durationMs }, { url }] = await Promise.all([
-        desktopApi.getWhisperVideoDuration(trimmedPath),
-        desktopApi.getLocalVideoPreviewUrl(trimmedPath),
-      ]);
-      if (generationVideoLoadIdRef.current !== loadId) return;
+      const preview = await videoPreviewSessionRef.current!.load(trimmedPath);
+      if (preview.videoPath !== trimmedPath || preview.durationMs === null) return;
       const initialSegmentId = `segment-${++generationSegmentCounterRef.current}`;
-      setGenerationVideoPreviewUrl(url);
-      setGenerationDurationMs(durationMs);
       setGenerationSegments(
-        createInitialSubtitleGenerationSegments(durationMs, initialSegmentId)
+        createInitialSubtitleGenerationSegments(
+          preview.durationMs,
+          initialSegmentId,
+        )
       );
       setActiveGenerationSegmentId(initialSegmentId);
-      setGenerationStatus({ tone: "neutral", message: null });
-
-      void desktopApi
-        .getCompatibleVideoPreviewUrl(trimmedPath)
-        .then((preview) => {
-          if (generationVideoLoadIdRef.current !== loadId) return;
-          setGenerationVideoPreviewUrl(preview.url);
-          setGenerationStatus({ tone: "neutral", message: null });
-        })
-        .catch((previewError) => {
-          if (generationVideoLoadIdRef.current !== loadId) return;
-          setGenerationStatus({
-            tone: "error",
-            message: `兼容预览生成失败：${
-              previewError instanceof Error
-                ? previewError.message
-                : String(previewError)
-            }`,
-          });
-        });
+      if (!preview.error) {
+        setGenerationStatus({ tone: "neutral", message: null });
+      }
     } catch (error) {
-      if (generationVideoLoadIdRef.current !== loadId) return;
       setGenerationStatus({
         tone: "error",
         message: error instanceof Error ? error.message : String(error),
@@ -402,131 +385,45 @@ export const SubtitleMuxPage = ({
   };
 
   useEffect(() => {
-    const task = desktopApi.getWhisperTranscriptionTask();
-    if (!task) return;
+    let hydratedTaskInput: object | null = null;
 
-    const { input, progress } = task;
-    const restoredSegments = input.ranges.map((range, index) => ({
-      id: `segment-${index + 1}`,
-      startMs: range.startMs,
-      endMs: range.endMs,
-    }));
-    let disposed = false;
+    const unsubscribe = desktopApi.onWhisperTranscriptionTaskChange((task) => {
+      if (task.status === "idle" || !task.input) return;
+      if (hydratedTaskInput !== task.input) {
+        hydratedTaskInput = task.input;
+        const restoredSegments = task.input.ranges.map((range, index) => ({
+          id: `segment-${index + 1}`,
+          startMs: range.startMs,
+          endMs: range.endMs,
+        }));
+        setGenerationVideoPath(task.input.videoPath);
+        setGenerationDurationMs(task.input.durationMs);
+        setGenerationSegments(restoredSegments);
+        setActiveGenerationSegmentId(restoredSegments[0]?.id ?? null);
+        setGenerationRangeError(null);
+        generationSegmentCounterRef.current = restoredSegments.length;
+        const preview = videoPreviewSessionRef.current!.getSnapshot();
+        if (
+          preview.videoPath !== task.input.videoPath ||
+          preview.durationMs === null
+        ) {
+          void videoPreviewSessionRef.current!.load(task.input.videoPath);
+        }
+      }
 
-    generationVideoLoadIdRef.current = `restored-${crypto.randomUUID()}`;
-    setGenerationVideoPath(input.videoPath);
-    setGenerationDurationMs(input.durationMs);
-    setGenerationSegments(restoredSegments);
-    setActiveGenerationSegmentId(restoredSegments[0]?.id ?? null);
-    setGenerationRangeError(null);
-    generationSegmentCounterRef.current = restoredSegments.length;
-    setGenerationVideoPreviewUrl(null);
-    setTranscriptionCommandLines(task.commandLines);
-    setTranscriptionProgressMessage(progress?.message ?? null);
-    setTranscriptionProgressPercent(
-      typeof progress?.overallPercent === "number"
-        ? progress.overallPercent
-        : progress?.phase === "completed"
-          ? 100
-          : null
-    );
-
-    if (task.status === "running") {
-      setIsGenerating(true);
-      setIsCancelingGeneration(false);
-      setGeneratedSubtitlePath(null);
-      setGenerationStatus({ tone: "neutral", message: null });
-    } else if (task.status === "completed") {
-      const summary =
-        progress?.message ??
-        (task.result.outputPath
-          ? `已生成 ${task.result.outputPath}`
-          : "没有生成字幕");
-      setIsGenerating(false);
-      setIsCancelingGeneration(false);
-      setGeneratedSubtitlePath(task.result.outputPath);
-      setGenerationStatus({
-        tone: task.result.outputPath && !task.result.stopped && task.result.failedRanges.length === 0
-          ? "success"
-          : task.result.outputPath
-            ? "neutral"
-            : "error",
-        message: summary,
-      });
-    } else {
-      setIsGenerating(false);
-      setIsCancelingGeneration(false);
-      setGeneratedSubtitlePath(null);
-      setGenerationStatus({ tone: "error", message: task.error });
-    }
-
-    void desktopApi
-      .getLocalVideoPreviewUrl(input.videoPath)
-      .then(({ url }) => {
-        if (!disposed) setGenerationVideoPreviewUrl(url);
-      })
-      .catch(() => undefined);
-    void desktopApi
-      .getCompatibleVideoPreviewUrl(input.videoPath)
-      .then((preview) => {
-        if (!disposed) setGenerationVideoPreviewUrl(preview.url);
-      })
-      .catch(() => undefined);
+      setTranscriptionCommandLines(task.commandLines);
+      setTranscriptionProgressMessage(task.progressMessage);
+      setTranscriptionProgressPercent(task.progressPercent);
+      setIsGenerating(task.status === "running" || task.status === "canceling");
+      setIsCancelingGeneration(task.status === "canceling");
+      setGeneratedSubtitlePath(task.outputPath);
+      setGenerationStatus(task.presentation);
+    });
 
     return () => {
-      disposed = true;
+      unsubscribe();
     };
   }, []);
-
-  useEffect(() =>
-    desktopApi.onWhisperTranscriptionTaskChange((task) => {
-      if (!task) return;
-
-      const { progress } = task;
-      setTranscriptionCommandLines(task.commandLines);
-      setTranscriptionProgressMessage(progress?.message ?? null);
-      setTranscriptionProgressPercent(
-        typeof progress?.overallPercent === "number"
-          ? progress.overallPercent
-          : progress?.phase === "completed"
-            ? 100
-            : null
-      );
-
-      if (task.status === "running") {
-        setIsGenerating(true);
-        setIsCancelingGeneration(false);
-        setGenerationStatus({ tone: "neutral", message: null });
-        return;
-      }
-
-      setIsGenerating(false);
-      setIsCancelingGeneration(false);
-      if (task.status === "completed") {
-        const summary =
-          progress?.message ??
-          (task.result.outputPath
-            ? `已生成 ${task.result.outputPath}`
-            : "没有生成字幕");
-        setGeneratedSubtitlePath(task.result.outputPath);
-        setGenerationStatus({
-          tone:
-            task.result.outputPath &&
-            !task.result.stopped &&
-            task.result.failedRanges.length === 0
-              ? "success"
-              : task.result.outputPath
-                ? "neutral"
-                : "error",
-          message: summary,
-        });
-        return;
-      }
-
-      setGeneratedSubtitlePath(null);
-      setGenerationStatus({ tone: "error", message: task.error });
-    }),
-  []);
 
   const handleChooseGenerationVideo = async () => {
     try {
@@ -554,22 +451,7 @@ export const SubtitleMuxPage = ({
   };
 
   const useSubtitleTranslationPath = (path: string) => {
-    const trimmedPath = path.trim();
-    if (!trimmedPath) return;
-    if (!/\.srt$/i.test(trimmedPath)) {
-      setSubtitleTranslationStatus({
-        tone: "error",
-        message: "只支持 .srt 字幕文件",
-      });
-      return;
-    }
-    setSubtitleTranslationPath(trimmedPath);
-    setTranslatedSubtitlePath(null);
-    setSubtitleTranslationProgress({ message: null, percent: null });
-    setSubtitleTranslationStatus({
-      tone: "neutral",
-      message: "已选择字幕，准备翻译",
-    });
+    subtitleTranslationSessionRef.current!.selectFile(path);
   };
 
   const handleChooseSubtitleTranslationFile = async () => {
@@ -579,37 +461,30 @@ export const SubtitleMuxPage = ({
       useSubtitleTranslationPath(selectedPath);
     } catch (error) {
       const wasCancelled = error instanceof DOMException && error.name === "AbortError";
-      setSubtitleTranslationStatus({
-        tone: wasCancelled ? "neutral" : "error",
-        message: wasCancelled
+      subtitleTranslationSessionRef.current!.report(
+        wasCancelled ? "neutral" : "error",
+        wasCancelled
           ? "已停止字幕翻译"
           : error instanceof Error
             ? error.message
             : String(error),
-      });
+      );
     }
   };
 
   const handleCancelSubtitleTranslation = async () => {
-    if (!subtitleTranslationPath || !isTranslatingSubtitle) return;
-    setSubtitleTranslationStatus({ tone: "neutral", message: "正在停止翻译" });
     try {
-      await desktopApi.cancelTranslateSubtitleFile({ subtitlePath: subtitleTranslationPath });
-    } catch (error) {
-      setSubtitleTranslationStatus({
-        tone: "error",
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
+      await subtitleTranslationSessionRef.current!.cancel();
+    } catch {}
   };
 
   const handleDropSubtitleTranslationPaths = (paths: string[]) => {
     const selectedPath = paths.find((path) => path.trim().length > 0);
     if (!selectedPath) {
-      setSubtitleTranslationStatus({
-        tone: "error",
-        message: "拖放没有读取到字幕文件，请重新拖入或使用选择字幕",
-      });
+      subtitleTranslationSessionRef.current!.report(
+        "error",
+        "拖放没有读取到字幕文件，请重新拖入或使用选择字幕",
+      );
       return;
     }
     useSubtitleTranslationPath(selectedPath);
@@ -820,221 +695,54 @@ export const SubtitleMuxPage = ({
       return;
     }
 
-    setIsGenerating(true);
-    setIsCancelingGeneration(false);
-    setGeneratedSubtitlePath(null);
-    setTranscriptionProgressMessage("准备生成字幕");
-    setTranscriptionProgressPercent(0);
-    setTranscriptionCommandLines([]);
-    setGenerationStatus({ tone: "neutral", message: null });
     try {
-      const result = await desktopApi.transcribeVideoSubtitle(
-        {
-          videoPath: generationVideoPath,
-          ranges: generationRanges,
-          durationMs: generationDurationMs,
-          language: "ja",
-        },
-        (progress) => {
-          setTranscriptionProgressMessage(progress.message);
-          setTranscriptionProgressPercent((current) =>
-            typeof progress.overallPercent === "number"
-              ? progress.overallPercent
-              : progress.phase === "completed"
-                ? 100
-                : current,
-          );
-          if (progress.phase === "command") {
-            setTranscriptionCommandLines((current) =>
-              current.includes(progress.command)
-                ? current
-                : [...current, progress.command]
-            );
-          }
-        }
-      );
+      const result = await desktopApi.transcribeVideoSubtitle({
+        videoPath: generationVideoPath,
+        ranges: generationRanges,
+        durationMs: generationDurationMs,
+        language: "ja",
+      });
       if (result.completedRanges.length > 0) {
         void rememberSuccessfulFasterWhisperModel();
       }
-      setGeneratedSubtitlePath(result.outputPath);
-      const failedDetails = result.failedRanges
-        .map(({ range, error }) => `${formatGenerationRange(range)}：${error}`)
-        .join("；");
-      const stoppedSummary = result.stopped
-        ? [
-            "字幕生成已停止",
-            result.completedRanges.length > 0
-              ? `已完成 ${result.completedRanges.length} 个（${result.completedRanges.map(formatGenerationRange).join("、")}）`
-              : "已完成 0 个",
-            result.failedRanges.length > 0
-              ? `失败 ${result.failedRanges.length} 个（${failedDetails}）`
-              : null,
-            result.interruptedRange
-              ? `中断 ${formatGenerationRange(result.interruptedRange)}`
-              : null,
-            result.pendingRanges.length > 0
-              ? `未处理 ${result.pendingRanges.length} 个（${result.pendingRanges.map(formatGenerationRange).join("、")}）`
-              : null,
-          ]
-            .filter(Boolean)
-            .join("；")
-        : null;
-      if (result.outputPath) {
-        const summary = result.stopped
-          ? stoppedSummary!
-          : result.failedRanges.length > 0
-            ? `已生成 ${result.outputPath}；成功 ${result.completedRanges.length} 个片段，失败 ${result.failedRanges.length} 个片段${failedDetails ? `（${failedDetails}）` : ""}`
-            : `已生成 ${result.outputPath}`;
-        setTranscriptionProgressMessage(summary);
-        setGenerationStatus({
-          tone:
-            result.stopped || result.failedRanges.length > 0
-              ? "neutral"
-              : "success",
-          message: summary,
-        });
-      } else {
-        const summary = result.stopped
-          ? stoppedSummary!
-          : `没有生成字幕；失败 ${result.failedRanges.length} 个片段${failedDetails ? `（${failedDetails}）` : ""}`;
-        setTranscriptionProgressMessage(summary);
-        setGenerationStatus({
-          tone: result.stopped ? "neutral" : "error",
-          message: summary,
-        });
-      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message === "字幕生成已停止") {
-        setTranscriptionProgressMessage("字幕生成已停止");
-        setGenerationStatus({ tone: "neutral", message });
-        return;
-      }
-      setGenerationStatus({
-        tone: "error",
-        message,
-      });
-    } finally {
-      setIsGenerating(false);
-      setIsCancelingGeneration(false);
+      // The task session publishes the failure through the same restoration seam.
     }
   };
 
   const handleCancelGenerateSubtitle = async () => {
     if (!generationVideoPath || !isGenerating) return;
-    setIsCancelingGeneration(true);
-    setTranscriptionProgressMessage("正在停止字幕生成");
-    setGenerationStatus({ tone: "neutral", message: "正在停止字幕生成" });
     try {
       await desktopApi.cancelTranscribeVideoSubtitle({
         videoPath: generationVideoPath,
       });
-    } catch (error) {
-      setIsCancelingGeneration(false);
-      setGenerationStatus({
-        tone: "error",
-        message: error instanceof Error ? error.message : String(error),
-      });
+    } catch {
+      // The task session keeps the running snapshot and publishes the error.
     }
   };
 
   const handleTranslateSubtitle = async () => {
-    if (!subtitleTranslationPath) {
-      setSubtitleTranslationStatus({ tone: "error", message: "请先选择 SRT 字幕文件" });
-      return;
-    }
-
-    setIsTranslatingSubtitle(true);
-    setSubtitleTranslationProgress({ message: "准备翻译字幕", percent: 0 });
-    setSubtitleTranslationStatus({ tone: "neutral", message: "正在翻译字幕" });
     try {
-      const result = await desktopApi.translateSubtitleFile(
-        {
-          subtitlePath: subtitleTranslationPath,
-          targetLanguage: subtitleTranslationTargetLanguage,
-          sourceLanguage: "auto",
-          maxBatchCharacters: subtitleTranslationBatchCharacters,
-        },
-        (progress) => {
-          setSubtitleTranslationProgress({
-            message: progress.message,
-            percent:
-              progress.totalCueCount > 0
-                ? (progress.completedCueCount / progress.totalCueCount) * 100
-                : 100,
-          });
-        }
-      );
-      setTranslatedSubtitlePath(result.outputPath);
-      setSubtitleTranslationProgress((current) => ({
-        message: current.message ?? "字幕翻译完成",
-        percent: 100,
-      }));
-      setSubtitleTranslationStatus({
-        tone: "success",
-        message: `已翻译 ${result.cueCount} 条字幕`,
-      });
-    } catch (error) {
-      setSubtitleTranslationStatus({
-        tone: "error",
-        message: error instanceof Error ? error.message : String(error),
-      });
-      setSubtitleTranslationProgress({ message: null, percent: null });
-    } finally {
-      setIsTranslatingSubtitle(false);
-    }
-  };
-
-  const applySubtitleTranslationSettingsAction = (
-    action: SubtitleTranslationUiAction,
-  ) => {
-    const next = updateSubtitleTranslationUiState(
-      {
-        targetLanguage: subtitleTranslationTargetLanguage,
-        batchCharacters: subtitleTranslationBatchCharacters,
-        translatedSubtitlePath,
-        progress: subtitleTranslationProgress,
-        status: subtitleTranslationStatus,
-      },
-      action,
-    );
-    setSubtitleTranslationTargetLanguage(next.targetLanguage);
-    setSubtitleTranslationBatchCharacters(next.batchCharacters);
-    setTranslatedSubtitlePath(next.translatedSubtitlePath);
-    setSubtitleTranslationProgress(next.progress);
-    setSubtitleTranslationStatus(next.status);
+      await subtitleTranslationSessionRef.current!.start();
+    } catch {}
   };
 
   const handleChangeSubtitleTranslationTargetLanguage = (value: string) => {
-    applySubtitleTranslationSettingsAction({
-      type: "changeTargetLanguage",
-      value,
-    });
+    subtitleTranslationSessionRef.current!.changeTargetLanguage(value);
   };
 
   const handleChangeSubtitleTranslationBatchCharacters = (value: number) => {
-    applySubtitleTranslationSettingsAction({
-      type: "changeBatchCharacters",
-      value,
-    });
+    subtitleTranslationSessionRef.current!.changeBatchCharacters(value);
   };
 
   const handleChangeSubtitleTranslationProxyUrl = (value: string) => {
-    setSubtitleTranslationProxyUrl(value);
-    void desktopApi.configSet("subtitle_translation_proxy_url", value.trim());
+    subtitleTranslationSessionRef.current!.changeProxyUrl(value);
   };
 
   const handleTestSubtitleTranslationConnection = async () => {
-    setSubtitleTranslationConnectionStatus("testing");
-    setSubtitleTranslationConnectionError(null);
     try {
-      const result = await desktopApi.testSubtitleTranslationConnection(subtitleTranslationProxyUrl);
-      setSubtitleTranslationConnectionStatus(result.available ? "available" : "unavailable");
-      setSubtitleTranslationConnectionError(result.error);
-    } catch (error) {
-      setSubtitleTranslationConnectionStatus("unavailable");
-      setSubtitleTranslationConnectionError(error instanceof Error ? error.message : String(error));
-    }
+      await subtitleTranslationSessionRef.current!.testConnection();
+    } catch {}
   };
 
   const handleStart = async () => {
@@ -1086,9 +794,9 @@ export const SubtitleMuxPage = ({
 
   const handleClearGeneration = () => {
     desktopApi.clearCompletedWhisperTranscriptionTask();
-    generationVideoLoadIdRef.current = crypto.randomUUID();
+    videoPreviewSessionRef.current!.clear();
     setGenerationVideoPath(null);
-    setGenerationVideoPreviewUrl(null);
+    setGenerationVideoPreview(null);
     setGenerationDurationMs(null);
     setGenerationSegments([]);
     setActiveGenerationSegmentId(null);
@@ -1102,12 +810,7 @@ export const SubtitleMuxPage = ({
   };
 
   const handleClearTranslation = () => {
-    setSubtitleTranslationPath(null);
-    setTranslatedSubtitlePath(null);
-    setSubtitleTranslationProgress({ message: null, percent: null });
-    setSubtitleTranslationStatus({ tone: "neutral", message: null });
-    setSubtitleTranslationConnectionStatus("idle");
-    setSubtitleTranslationConnectionError(null);
+    subtitleTranslationSessionRef.current!.clear();
   };
 
   const handleRevealGeneratedSubtitle = async () => {
@@ -1127,10 +830,10 @@ export const SubtitleMuxPage = ({
     try {
       await revealInFolder(translatedSubtitlePath);
     } catch (error) {
-      setSubtitleTranslationStatus({
-        tone: "error",
-        message: error instanceof Error ? error.message : String(error),
-      });
+      subtitleTranslationSessionRef.current!.report(
+        "error",
+        error instanceof Error ? error.message : String(error),
+      );
     }
   };
 
@@ -1147,7 +850,7 @@ export const SubtitleMuxPage = ({
         subtitlePath={draft.subtitlePath}
         outputPath={draft.outputPath}
         generationVideoPath={generationVideoPath}
-        generationVideoPreviewUrl={generationVideoPreviewUrl}
+        generationVideoPreview={generationVideoPreview}
         subtitleTranslationPath={subtitleTranslationPath}
         subtitleTranslationTargetLanguage={subtitleTranslationTargetLanguage}
         subtitleTranslationOutputPath={subtitleTranslationOutputPath}

@@ -2,62 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   buildSubtitleMuxOutputPath,
   classifySubtitleMuxDropPaths,
-  extractSubtitleMuxDropPaths,
   mergeSubtitleMuxDraftWithDropPaths,
 } from "./subtitleMuxModel";
 
 describe("subtitleMuxModel", () => {
-  test("extracts local file paths from file paths before URI fallbacks", () => {
-    expect(
-      extractSubtitleMuxDropPaths({
-        filePaths: ["/Volumes/JAV/ABP-123.mp4", "/Volumes/JAV/ABP-123.srt"],
-        uriList: "file:///Volumes/ignored/demo.mp4",
-        plainText: "/Volumes/ignored/demo.srt",
-      })
-    ).toEqual(["/Volumes/JAV/ABP-123.mp4", "/Volumes/JAV/ABP-123.srt"]);
-  });
-
-  test("falls back to URI list and plain text paths", () => {
-    expect(
-      extractSubtitleMuxDropPaths({
-        filePaths: [],
-        uriList:
-          "file:///Volumes/JAV/IPX-535.mp4\nfile:///Volumes/JAV/IPX-535.ass",
-        plainText: "",
-      })
-    ).toEqual(["/Volumes/JAV/IPX-535.mp4", "/Volumes/JAV/IPX-535.ass"]);
-
-    expect(
-      extractSubtitleMuxDropPaths({
-        filePaths: [],
-        uriList: "",
-        plainText: "/Volumes/JAV/SONE-001.mp4\n/Volumes/JAV/SONE-001.ssa",
-      })
-    ).toEqual(["/Volumes/JAV/SONE-001.mp4", "/Volumes/JAV/SONE-001.ssa"]);
-  });
-
-  test("normalizes CRLF file URI drops", () => {
-    expect(
-      extractSubtitleMuxDropPaths({
-        filePaths: [],
-        uriList:
-          "file:///Volumes/JAV/IPX-535.mp4\r\nfile:///Volumes/JAV/IPX-535.ass",
-        plainText: "",
-      })
-    ).toEqual(["/Volumes/JAV/IPX-535.mp4", "/Volumes/JAV/IPX-535.ass"]);
-  });
-
-  test("falls back to WebKit macOS file-url text types", () => {
-    expect(
-      extractSubtitleMuxDropPaths({
-        filePaths: [],
-        uriList: "",
-        plainText: "",
-        fallbackText: ["", "file:///Volumes/JAV/IPX-535.mp4"],
-      })
-    ).toEqual(["/Volumes/JAV/IPX-535.mp4"]);
-  });
-
   test("classifies one video plus one subtitle and derives the mkv output", () => {
     expect(
       classifySubtitleMuxDropPaths([

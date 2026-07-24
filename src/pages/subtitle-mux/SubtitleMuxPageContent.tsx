@@ -1,6 +1,4 @@
 import {
-  useEffect,
-  useRef,
   useState,
   type ReactElement,
   type ReactNode,
@@ -41,13 +39,10 @@ import {
 } from "@/components/ui/select";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import type { SubtitleGenerationSegment } from "../../subtitle-mux/subtitleGenerationSegments";
-import {
-  attachStreamingVideoPreview,
-  buildStreamingPreviewSeekUrl,
-  isStreamingPreviewUrl,
-} from "../../subtitle-mux/streamingVideoPreview";
+import type { VideoPreviewSource } from "../../subtitle-mux/videoPreviewSession";
 import { SubtitleGenerationSegmentEditor } from "./SubtitleGenerationSegmentEditor";
 import { SubtitleMergeDropzone } from "./SubtitleMergeDropzone";
+import { useVideoPreviewPlayback } from "./useVideoPreviewPlayback";
 
 type FfmpegStatus = {
   available: boolean;
@@ -93,7 +88,7 @@ export type SubtitleMuxPageContentProps = {
   subtitlePath: string | null;
   outputPath: string | null;
   generationVideoPath: string | null;
-  generationVideoPreviewUrl: string | null;
+  generationVideoPreview: VideoPreviewSource | null;
   generationDurationMs: number | null;
   generationSegments: SubtitleGenerationSegment[];
   activeGenerationSegmentId: string | null;
@@ -458,7 +453,7 @@ export const SubtitleMuxPageContent = ({
   subtitlePath,
   outputPath,
   generationVideoPath,
-  generationVideoPreviewUrl,
+  generationVideoPreview,
   generationDurationMs,
   generationSegments,
   activeGenerationSegmentId,
@@ -536,54 +531,10 @@ export const SubtitleMuxPageContent = ({
   onClearTranslation,
   onRevealOutput,
 }: SubtitleMuxPageContentProps) => {
-  const [generationPlayheadMs, setGenerationPlayheadMs] = useState(0);
-  const [isGenerationPreviewPlaying, setIsGenerationPreviewPlaying] =
-    useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const generationPreviewOffsetMsRef = useRef(0);
-  const generationPreviewAutoplayRef = useRef(false);
-  const [generationStreamingStartMs, setGenerationStreamingStartMs] =
-    useState(0);
-  const [isPreviewUnavailable, setIsPreviewUnavailable] = useState(false);
-  const [streamingPreviewError, setStreamingPreviewError] = useState<string | null>(null);
+  const previewPlayback = useVideoPreviewPlayback(generationVideoPreview);
   const [generationDropNotice, setGenerationDropNotice] = useState<
     string | null
   >(null);
-
-  useEffect(() => {
-    generationPreviewOffsetMsRef.current = 0;
-    setGenerationStreamingStartMs(0);
-    setIsPreviewUnavailable(false);
-    setStreamingPreviewError(null);
-  }, [generationVideoPreviewUrl]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (
-      !video ||
-      !generationVideoPreviewUrl ||
-      !isStreamingPreviewUrl(generationVideoPreviewUrl)
-    ) {
-      return;
-    }
-
-    return attachStreamingVideoPreview(
-      video,
-      buildStreamingPreviewSeekUrl(
-        generationVideoPreviewUrl,
-        generationStreamingStartMs,
-      ),
-      {
-        autoplay: generationPreviewAutoplayRef.current,
-        onError: (error) => {
-          setStreamingPreviewError(
-            error instanceof Error ? error.message : String(error),
-          );
-          setIsPreviewUnavailable(true);
-        },
-      },
-    );
-  }, [generationStreamingStartMs, generationVideoPreviewUrl]);
 
   const ffmpegUnavailable = ffmpegStatus?.available === false;
   const fasterWhisperUnavailable = fasterWhisperStatus?.available === false;
@@ -644,7 +595,7 @@ export const SubtitleMuxPageContent = ({
   );
   const canClearGeneration = Boolean(
     generationVideoPath ||
-      generationVideoPreviewUrl ||
+      generationVideoPreview ||
       generationDurationMs !== null ||
       generationSegments.length > 0 ||
       activeGenerationSegmentId ||
@@ -1127,72 +1078,45 @@ export const SubtitleMuxPageContent = ({
             <div className="grid gap-2.5">
 
             <div className="grid gap-2.5">
-              {generationVideoPreviewUrl && !isPreviewUnavailable ? (
+              {generationVideoPreview && !previewPlayback.isUnavailable ? (
                 <video
-                  ref={videoRef}
+                  ref={previewPlayback.videoRef}
                   data-subtitle-generate-preview="true"
-                  src={
-                    isStreamingPreviewUrl(generationVideoPreviewUrl)
-                      ? undefined
-                      : generationVideoPreviewUrl
-                  }
+                  src={previewPlayback.sourceUrl}
                   className="aspect-video mx-auto w-full max-w-[720px] rounded-[8px] bg-black"
                   onTimeUpdate={(event) =>
-                    setGenerationPlayheadMs(
-                      generationPreviewOffsetMsRef.current +
-                        Math.round(event.currentTarget.currentTime * 1000),
-                    )
+                    previewPlayback.reportTime(event.currentTarget.currentTime)
                   }
-                  onPlay={() => setIsGenerationPreviewPlaying(true)}
-                  onPause={() => setIsGenerationPreviewPlaying(false)}
-                  onEnded={() => setIsGenerationPreviewPlaying(false)}
-                  onError={() => setIsPreviewUnavailable(true)}
+                  onPlay={() => previewPlayback.reportPlaying(true)}
+                  onPause={() => previewPlayback.reportPlaying(false)}
+                  onEnded={() => previewPlayback.reportPlaying(false)}
+                  onError={previewPlayback.reportNativeError}
                 />
               ) : generationVideoPath ? (
                 <div className="rounded-[8px] bg-[var(--result-surface)] px-3 py-4 text-[length:var(--font-size-caption)] text-muted-foreground">
-                  {streamingPreviewError
-                    ? `实时兼容预览失败：${streamingPreviewError}`
+                  {previewPlayback.error
+                    ? `实时兼容预览失败：${previewPlayback.error}`
                     : "当前格式无法直接预览，正在建立实时兼容预览；也可以继续手动输入开始和结束时间。"}
                 </div>
               ) : null}
 
               <SubtitleGenerationSegmentEditor
                 durationMs={generationDurationMs ?? 0}
-                playheadMs={generationPlayheadMs}
-                isPlaying={isGenerationPreviewPlaying}
+                playheadMs={previewPlayback.playheadMs}
+                isPlaying={previewPlayback.isPlaying}
                 segments={generationSegments}
                 activeSegmentId={activeGenerationSegmentId}
                 disabled={isGenerating || !generationVideoPath}
                 error={generationRangeError}
                 onSelectSegment={onSelectGenerationSegment}
                 onRemoveSegment={onRemoveGenerationSegment}
-                onSeek={(timeMs) => {
-                  const video = videoRef.current;
-                  if (!video) return;
-                  if (isStreamingPreviewUrl(generationVideoPreviewUrl)) {
-                    const wasPlaying = !video.paused;
-                    generationPreviewOffsetMsRef.current = timeMs;
-                    generationPreviewAutoplayRef.current = wasPlaying;
-                    setGenerationStreamingStartMs(timeMs);
-                  } else {
-                    video.currentTime = timeMs / 1000;
-                  }
-                  setGenerationPlayheadMs(timeMs);
-                }}
-                onTogglePlayback={() => {
-                  const video = videoRef.current;
-                  if (!video) return;
-                  if (video.paused) {
-                    void video.play().catch(() => undefined);
-                  } else {
-                    video.pause();
-                  }
-                }}
+                onSeek={previewPlayback.seek}
+                onTogglePlayback={previewPlayback.toggle}
                 onSetStartFromPlayhead={() =>
-                  onSetGenerationRangeStart(generationPlayheadMs)
+                  onSetGenerationRangeStart(previewPlayback.playheadMs)
                 }
                 onSetEndFromPlayhead={() =>
-                  onSetGenerationRangeEnd(generationPlayheadMs)
+                  onSetGenerationRangeEnd(previewPlayback.playheadMs)
                 }
               />
           </div>

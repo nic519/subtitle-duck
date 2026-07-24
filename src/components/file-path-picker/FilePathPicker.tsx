@@ -8,7 +8,7 @@ import {
 import { FolderOpen } from "lucide-react";
 import { ToolbarButton } from "@/components/page-ui";
 import { Input } from "@/components/ui/input";
-import { resolveLocalFileDrop } from "@/desktop/file-drop/localFileInput";
+import { resolveLocalFileImport } from "@/local-file-import/localFileImport";
 
 const autoApplyDelayMs = 1200;
 
@@ -116,12 +116,7 @@ export const FilePathPicker = ({
     event.stopPropagation();
     setIsDragActive(false);
 
-    void resolveLocalFileDrop(event.dataTransfer)
-      .then(onDropPaths)
-      .catch((error) => {
-        console.error("Failed to resolve local file drop:", error);
-        onDropPaths([]);
-      });
+    void resolveLocalFileImport(event.dataTransfer).then(onDropPaths);
   };
 
   return (
