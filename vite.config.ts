@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "./dev-server.config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageJson = JSON.parse(
@@ -24,7 +25,8 @@ export default defineConfig(({ mode }) => {
       ),
     },
     server: {
-      port: 1420,
+      host: DEV_SERVER_HOST,
+      port: DEV_SERVER_PORT,
       strictPort: true,
       watch: {
         ignored: ["**/build/**", "**/dist/**"],

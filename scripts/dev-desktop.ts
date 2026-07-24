@@ -1,10 +1,13 @@
-const rendererUrl = "http://127.0.0.1:1420";
+import {
+  DEV_SERVER_HOST,
+  DEV_SERVER_URL,
+} from "../dev-server.config";
 
 const vite = Bun.spawn([
   process.execPath,
   "node_modules/vite/bin/vite.js",
   "--host",
-  "127.0.0.1",
+  DEV_SERVER_HOST,
 ], {
   cwd: process.cwd(),
   stdin: "inherit",
@@ -16,7 +19,7 @@ const waitForRenderer = async () => {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(rendererUrl);
+      const response = await fetch(DEV_SERVER_URL);
       if (response.ok) return;
     } catch {
       // Vite is still starting.
@@ -43,7 +46,7 @@ try {
   await waitForRenderer();
   desktop = Bun.spawn(["node_modules/electrobun/bin/electrobun", "dev", "--watch"], {
     cwd: process.cwd(),
-    env: { ...process.env, ELECTROBUN_RENDERER_URL: rendererUrl },
+    env: { ...process.env, ELECTROBUN_RENDERER_URL: DEV_SERVER_URL },
     stdin: "inherit",
     stdout: "inherit",
     stderr: "inherit",
