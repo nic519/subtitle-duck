@@ -693,6 +693,7 @@ export const transcribeVideoSubtitleRanges = async (
   let interruptedRange: WhisperTimeRange | null = null;
   let pendingRanges: WhisperTimeRange[] = [];
   let stopped = false;
+  let latestOverallPercent = 0;
 
   for (const [rangeIndex, range] of ranges.entries()) {
     const rangeNumber = rangeIndex + 1;
@@ -710,6 +711,7 @@ export const transcribeVideoSubtitleRanges = async (
         `.${basename(input.outputPath, extname(input.outputPath))}.${Date.now()}.user-range-${rangeNumber}.srt`
       );
     try {
+      let currentRangePercent = 0;
       await transcribeRange(
         {
           ...singleRangeInput,
@@ -721,22 +723,27 @@ export const transcribeVideoSubtitleRanges = async (
           abortSignal: deps.abortSignal,
           resolveExecutable: deps.resolveExecutable,
           onProgress: (progress) => {
-            const currentPercent =
+            if (
               progress.phase === "transcribing" &&
               typeof progress.percent === "number"
-                ? progress.percent
-                : progress.phase === "completed"
-                  ? 100
-                  : 0;
+            ) {
+              currentRangePercent = progress.percent;
+            } else if (progress.phase === "completed") {
+              currentRangePercent = 100;
+            }
             const overallPercent = getOverallTranscriptionPercent({
               completedDurationMs: completedRangeDurationMs,
               currentDurationMs: range.endMs - range.startMs,
               totalDurationMs: totalRangeDurationMs,
-              currentPercent,
+              currentPercent: currentRangePercent,
             });
+            latestOverallPercent = Math.max(
+              latestOverallPercent,
+              overallPercent,
+            );
             deps.onProgress?.({
               ...progress,
-              overallPercent,
+              overallPercent: latestOverallPercent,
               rangeIndex: rangeNumber,
               rangeTotal: ranges.length,
               range,
@@ -759,16 +766,17 @@ export const transcribeVideoSubtitleRanges = async (
         break;
       }
       failedRanges.push({ range, error: message });
+      latestOverallPercent = getOverallTranscriptionPercent({
+        completedDurationMs: completedRangeDurationMs,
+        currentDurationMs: range.endMs - range.startMs,
+        totalDurationMs: totalRangeDurationMs,
+        currentPercent: 100,
+      });
       deps.onProgress?.({
         phase: "range-failed",
         error: message,
         message: `片段 ${rangeNumber}/${ranges.length} 识别失败：${message}`,
-        overallPercent: getOverallTranscriptionPercent({
-          completedDurationMs: completedRangeDurationMs,
-          currentDurationMs: range.endMs - range.startMs,
-          totalDurationMs: totalRangeDurationMs,
-          currentPercent: 100,
-        }),
+        overallPercent: latestOverallPercent,
         rangeIndex: rangeNumber,
         rangeTotal: ranges.length,
         range,
@@ -790,7 +798,7 @@ export const transcribeVideoSubtitleRanges = async (
 
   deps.onProgress?.({
     phase: "completed",
-    overallPercent: 100,
+    overallPercent: stopped ? latestOverallPercent : 100,
     message: stopped
       ? `字幕生成已停止，已保留 ${completedRanges.length} 个片段`
       : `字幕已生成，成功 ${completedRanges.length} 个片段，失败 ${failedRanges.length} 个片段`,

@@ -426,8 +426,6 @@ export const SubtitleMuxPage = ({
     setTranscriptionProgressPercent(
       typeof progress?.overallPercent === "number"
         ? progress.overallPercent
-        : progress?.phase === "transcribing" && typeof progress.percent === "number"
-          ? progress.percent
         : progress?.phase === "completed"
           ? 100
           : null
@@ -490,8 +488,6 @@ export const SubtitleMuxPage = ({
       setTranscriptionProgressPercent(
         typeof progress?.overallPercent === "number"
           ? progress.overallPercent
-          : progress?.phase === "transcribing" && typeof progress.percent === "number"
-            ? progress.percent
           : progress?.phase === "completed"
             ? 100
             : null
@@ -844,12 +840,9 @@ export const SubtitleMuxPage = ({
           setTranscriptionProgressPercent((current) =>
             typeof progress.overallPercent === "number"
               ? progress.overallPercent
-              : progress.phase === "transcribing" &&
-                  typeof progress.percent === "number"
-                ? progress.percent
-                : progress.phase === "completed"
-                  ? 100
-                  : current,
+              : progress.phase === "completed"
+                ? 100
+                : current,
           );
           if (progress.phase === "command") {
             setTranscriptionCommandLines((current) =>
