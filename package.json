@@ -21,6 +21,7 @@
   "dependencies": {
     "clsx": "^2.1.1",
     "electrobun": "^1.18.1",
+    "google-translate-api-x": "10.7.3",
     "lucide-react": "^1.17.0",
     "radix-ui": "^1.4.3",
     "react": "^18.2.0",
