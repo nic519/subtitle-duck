@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="222" fill="#101216"/>
+  <rect width="1024" height="1024" rx="222" fill="#FFA31A"/>
   <g font-family="PingFang SC, STHeiti, Heiti SC, sans-serif" font-size="226" font-weight="800" text-anchor="middle">
-    <text x="400" y="575" fill="#F4F4F6">字幕</text>
-    <text x="748" y="575" fill="#FFA31A">鸭</text>
+    <text x="400" y="575" fill="#101216">字幕</text>
+    <text x="748" y="575" fill="#101216">鸭</text>
   </g>
-  <rect x="202" y="683" width="620" height="28" rx="14" fill="#FFA31A"/>
+  <rect x="202" y="683" width="620" height="28" rx="14" fill="#101216"/>
 </svg>

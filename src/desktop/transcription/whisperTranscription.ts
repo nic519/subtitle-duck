@@ -139,14 +139,11 @@ export const getDefaultWhisperOutputBasePathForRanges = (
 export const getAvailableWhisperOutputPathForRanges = (
   videoPath: string,
   checkExists: (filePath: string) => boolean = existsSync,
-  ranges: WhisperTimeRange[],
-  durationMs?: number
+  _ranges: WhisperTimeRange[],
+  _durationMs?: number
 ): string => {
-  const outputBasePath = getDefaultWhisperOutputBasePathForRanges(
-    videoPath,
-    ranges,
-    durationMs
-  );
+  const extension = extname(videoPath);
+  const outputBasePath = join(dirname(videoPath), basename(videoPath, extension));
   const defaultPath = `${outputBasePath}.srt`;
   if (!checkExists(defaultPath)) return defaultPath;
 

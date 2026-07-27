@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  getAvailableWhisperOutputPathForRanges,
   getOverallTranscriptionPercent,
   transcribeVideoSubtitleRanges,
   type WhisperTranscriptionProgress,
@@ -26,6 +27,30 @@ describe("getOverallTranscriptionPercent", () => {
         currentPercent: 120,
       }),
     ).toBe(100);
+  });
+});
+
+describe("subtitle output path", () => {
+  test("uses the video filename and replaces only its extension", () => {
+    expect(
+      getAvailableWhisperOutputPathForRanges(
+        "/Volumes/JAV/ABP-123.mp4",
+        () => false,
+        [{ startMs: 0, endMs: 60_000 }],
+        60_000,
+      ),
+    ).toBe("/Volumes/JAV/ABP-123.srt");
+  });
+
+  test("does not overwrite an existing same-named subtitle", () => {
+    expect(
+      getAvailableWhisperOutputPathForRanges(
+        "/Volumes/JAV/ABP-123.mp4",
+        (path) => path === "/Volumes/JAV/ABP-123.srt",
+        [{ startMs: 0, endMs: 60_000 }],
+        60_000,
+      ),
+    ).toBe("/Volumes/JAV/ABP-123-2.srt");
   });
 });
 
