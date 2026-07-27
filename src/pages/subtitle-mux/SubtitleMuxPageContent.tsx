@@ -1083,7 +1083,7 @@ export const SubtitleMuxPageContent = ({
                   ref={previewPlayback.videoRef}
                   data-subtitle-generate-preview="true"
                   src={previewPlayback.sourceUrl}
-                  hidden={isGenerating}
+                  hidden={isGenerating || Boolean(generatedSubtitlePath)}
                   className="aspect-video mx-auto w-full max-w-[720px] rounded-[8px] bg-black"
                   onTimeUpdate={(event) =>
                     previewPlayback.reportTime(event.currentTarget.currentTime)
