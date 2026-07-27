@@ -666,14 +666,17 @@ export const SubtitleMuxPageContent = ({
           <>
             <div
               data-subtitle-duck-brand="true"
-              className="mb-4 hidden justify-center pt-1 md:flex"
+              className="mb-4 hidden items-center gap-2.5 px-1 pt-1 md:flex"
             >
               <img
                 src={subtitleDuckIconUrl}
-                alt="字幕鸭"
+                alt=""
                 draggable={false}
-                className="size-[76px] select-none rounded-[18px] shadow-[0_12px_28px_-18px_rgba(0,0,0,0.8)]"
+                className="size-11 select-none rounded-[10px] shadow-[0_10px_22px_-16px_rgba(0,0,0,0.8)]"
               />
+              <span className="min-w-0 text-[15px] font-semibold tracking-[0.08em] text-foreground">
+                字幕鸭
+              </span>
             </div>
             <nav
               data-subtitle-tool-nav="true"
