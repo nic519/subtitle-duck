@@ -87,7 +87,11 @@ export const addSubtitleGenerationMarker = (
   const marker: SubtitleGenerationSegment = {
     id,
     startMs: clampMs(startMs, durationMs),
-    endMs: null,
+    // The initial full-video range is replaced by the user's first chosen
+    // start point. Keep its end at the video tail so it is immediately valid.
+    endMs: segments.length === 1 && segments[0]?.initial
+      ? clampMs(durationMs, durationMs)
+      : null,
   };
   const baseSegments =
     segments.length === 1 && segments[0]?.initial ? [] : segments;

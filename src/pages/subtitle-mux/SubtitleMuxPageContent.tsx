@@ -1083,6 +1083,7 @@ export const SubtitleMuxPageContent = ({
                   ref={previewPlayback.videoRef}
                   data-subtitle-generate-preview="true"
                   src={previewPlayback.sourceUrl}
+                  hidden={isGenerating}
                   className="aspect-video mx-auto w-full max-w-[720px] rounded-[8px] bg-black"
                   onTimeUpdate={(event) =>
                     previewPlayback.reportTime(event.currentTarget.currentTime)
@@ -1092,7 +1093,7 @@ export const SubtitleMuxPageContent = ({
                   onEnded={() => previewPlayback.reportPlaying(false)}
                   onError={previewPlayback.reportNativeError}
                 />
-              ) : generationVideoPath ? (
+              ) : !isGenerating && generationVideoPath ? (
                 <div className="rounded-[8px] bg-[var(--result-surface)] px-3 py-4 text-[length:var(--font-size-caption)] text-muted-foreground">
                   {previewPlayback.error
                     ? `实时兼容预览失败：${previewPlayback.error}`

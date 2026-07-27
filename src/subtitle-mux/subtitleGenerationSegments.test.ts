@@ -22,7 +22,7 @@ describe("subtitle generation segments", () => {
     ]);
   });
 
-  test("first marker replaces the initial full-video segment", () => {
+  test("first marker replaces the initial range and defaults to the video end", () => {
     const result = addSubtitleGenerationMarker(
       createInitialSubtitleGenerationSegments(60_000, "initial"),
       { id: "segment-2", startMs: 10_000, durationMs: 60_000 }
@@ -30,7 +30,7 @@ describe("subtitle generation segments", () => {
 
     expect(result).toEqual({
       ok: true,
-      segments: [{ id: "segment-2", startMs: 10_000, endMs: null }],
+      segments: [{ id: "segment-2", startMs: 10_000, endMs: 60_000 }],
     });
   });
 
