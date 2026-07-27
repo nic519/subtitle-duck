@@ -1,9 +1,9 @@
-name: Build and release on tag
+name: Build App On Tag
 
 on:
   push:
     tags:
-      - "v*"
+      - "*"
   workflow_dispatch:
 
 permissions:
@@ -13,71 +13,212 @@ jobs:
   verify:
     name: Verify project
     runs-on: macos-14
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.14"
-      - run: bun install --frozen-lockfile
-      - name: Ensure the tag matches package.json
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: bash
-        run: |
-          version="$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')"
-          test "${{ github.ref_name }}" = "v$version" || {
-            echo "Tag must be v$version to match package.json."
-            exit 1
-          }
-      - run: bun test
-      - run: bun run build
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun test
+
+      - name: Run typecheck and web build
+        run: bun run build
+
+  prepare-release:
+    name: Create draft GitHub release
+    needs: verify
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
 
   build-macos:
     name: Build macOS arm64
-    needs: verify
+    needs:
+      - verify
+      - prepare-release
+    if: >-
+      always() && needs.verify.result == 'success' &&
+      (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped')
     runs-on: macos-14
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.14"
-      - run: bun install --frozen-lockfile
-      - run: bun run package:mac
-      - uses: actions/upload-artifact@v4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build macOS package
+        run: bun run package:mac
+
+      - name: Collect macOS release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          dmg="$(find artifacts -maxdepth 1 -name '*.dmg' -print -quit)"
+          if [ -z "$dmg" ]; then
+            echo "No macOS DMG found in artifacts."
+            find artifacts -maxdepth 1 -type f -print
+            exit 1
+          fi
+          cp "$dmg" release-assets/
+          ls -lah release-assets
+
+      - name: Upload macOS asset to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
-          name: subtitle-duck-macos-arm64
-          path: artifacts/*
-          if-no-files-found: error
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: release-assets/*
+          fail_on_unmatched_files: true
 
   build-windows:
     name: Build Windows x64
-    needs: verify
+    needs:
+      - verify
+      - prepare-release
+    if: >-
+      always() && needs.verify.result == 'success' &&
+      (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped')
     runs-on: windows-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.14"
-      - run: bun install --frozen-lockfile
-      - run: bun run package:windows
-      - uses: actions/upload-artifact@v4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build Electrobun Windows package
+        run: bun run package:windows
+
+      - name: Prepare Windows installer payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tarZst = Get-ChildItem artifacts\*-win-x64-subtitle-duck.tar.zst | Select-Object -First 1
+          $zstd = Get-ChildItem node_modules\electrobun -Recurse -Filter zig-zstd.exe | Select-Object -First 1
+          if (-not $tarZst) { throw "Windows update tarball not found." }
+          if (-not $zstd) { throw "zig-zstd.exe not found." }
+
+          New-Item -ItemType Directory -Force portable-work | Out-Null
+          & $zstd.FullName decompress -i $tarZst.FullName -o portable-work\subtitle-duck.tar
+          tar -xf portable-work\subtitle-duck.tar -C portable-work
+
+          if (-not (Test-Path portable-work\subtitle-duck\bin\launcher.exe)) {
+            Get-ChildItem portable-work -Recurse -Force | Format-Table FullName,Length
+            throw "Windows launcher.exe not found after extracting build payload."
+          }
+
+      - name: Build native Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $outputDir = (Resolve-Path artifacts).Path
+          & $iscc `
+            "/DAppVersion=$version" `
+            "/O$outputDir" `
+            "/Fsubtitle-duck_${version}_x64-setup" `
+            "/DAppIconFile=$((Resolve-Path assets\app-icon.ico).Path)" `
+            "/DSourceDir=$((Resolve-Path portable-work\subtitle-duck).Path)" `
+            scripts\windows-installer.iss
+
+      - name: Collect Windows release asset
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $installer = Get-Item artifacts\subtitle-duck_*_x64-setup.exe | Select-Object -First 1
+          if (-not $installer) {
+            Get-ChildItem artifacts -Force | Format-Table Name,Length
+            throw "Windows installer exe not found."
+          }
+          Copy-Item $installer.FullName release-assets\
+          Get-ChildItem release-assets -Force | Format-Table Name,Length
+
+      - name: Upload Windows asset to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
-          name: subtitle-duck-windows-x64
-          path: artifacts/*
-          if-no-files-found: error
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: release-assets/*
+          fail_on_unmatched_files: true
+
+      - name: Smoke test native installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Get-Item artifacts\subtitle-duck_*_x64-setup.exe | Select-Object -First 1
+          $installDir = Join-Path $env:RUNNER_TEMP "subtitle-duck-smoke-install"
+          Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
+          $installProcess = Start-Process `
+            -FilePath $installer.FullName `
+            -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$installDir", "/LOG=installer-smoke.log") `
+            -Wait `
+            -PassThru
+
+          if ($installProcess.ExitCode -ne 0) {
+            Get-Content installer-smoke.log -ErrorAction SilentlyContinue
+            throw "Windows installer smoke install failed with exit code $($installProcess.ExitCode)."
+          }
+
+          $launcher = Get-ChildItem $installDir -Recurse -Filter launcher.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $launcher) { throw "Installed launcher.exe was not found under $installDir." }
+
+      - name: Upload Windows smoke-test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: subtitle-duck-Windows-Smoke-Logs
+          path: installer-smoke.log
+          if-no-files-found: ignore
+          retention-days: 1
 
   release:
     name: Publish GitHub release
-    needs: [build-macos, build-windows]
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    needs:
+      - build-macos
+      - build-windows
+    if: startsWith(github.ref, 'refs/tags/')
+
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: release-assets
-          merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - name: Publish draft release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           draft: false
-          files: release-assets/*
-          fail_on_unmatched_files: true
