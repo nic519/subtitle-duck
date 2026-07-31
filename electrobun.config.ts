@@ -13,7 +13,7 @@ export default {
     watchIgnore: ["dist/**"],
     copy: { dist: "views/main" },
     mac: {
-      icons: "assets/app-icon.iconset",
+      icons: "assets/AppIcon.icon",
       bundleCEF: false,
       codesign: false,
       notarize: false,
