@@ -1,26 +1,34 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import config from "../electrobun.config";
 
-if (process.platform !== "darwin") {
-  console.error("verify-macos-local-app must run on macOS.");
+const platform = process.platform === "darwin"
+  ? "macos"
+  : process.platform === "win32"
+    ? "win"
+    : process.platform === "linux"
+      ? "linux"
+      : null;
+
+if (!platform) {
+  console.error(`Unsupported verification platform: ${process.platform}`);
   process.exit(1);
 }
 
 const arch = process.arch === "arm64" ? "arm64" : "x64";
-const buildDir = path.resolve("build", `dev-macos-${arch}`);
-const appPath = path.join(buildDir, "subtitle-duck-dev.app");
-
-if (!existsSync(appPath)) {
-  console.error(`Missing local macOS app: ${appPath}`);
-  console.error("Run bun run build:mac:local first.");
-  process.exit(1);
-}
-
-const launcherPath = path.join(appPath, "Contents", "MacOS", "launcher");
+const buildDir = path.resolve("build", `dev-${platform}-${arch}`);
+const bundleName = `${config.app.name}-dev`;
+const bundlePath = process.platform === "darwin"
+  ? path.join(buildDir, `${bundleName}.app`)
+  : path.join(buildDir, bundleName);
+const launcherPath = process.platform === "darwin"
+  ? path.join(bundlePath, "Contents", "MacOS", "launcher")
+  : path.join(bundlePath, "bin", process.platform === "win32" ? "launcher.exe" : "launcher");
 
 if (!existsSync(launcherPath)) {
-  console.error(`Missing local macOS app launcher: ${launcherPath}`);
+  console.error(`Missing local desktop app launcher: ${launcherPath}`);
+  console.error("Run bun run build first.");
   process.exit(1);
 }
 
@@ -48,13 +56,13 @@ try {
 
   if (state.type === "exited") {
     throw new Error(
-      `Local macOS app exited early with code ${state.code}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+      `Local desktop app exited early with code ${state.code}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
     );
   }
 
   if (!stdout.includes("[subtitle-duck] BrowserWindow created")) {
     throw new Error(
-      `Local macOS app started but did not reach BrowserWindow creation.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+      `Local desktop app started but did not reach BrowserWindow creation.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
     );
   }
 } finally {
@@ -63,6 +71,6 @@ try {
   rmSync(tempDir, { recursive: true, force: true });
 }
 
-console.log("Local macOS app verified.");
-console.log(`App: ${appPath}`);
+console.log("Local desktop app verified.");
+console.log(`App: ${bundlePath}`);
 console.log(`Executable: ${launcherPath}`);

@@ -68,7 +68,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build macOS package
-        run: bun run package:mac
+        run: bun run package
 
       - name: Collect macOS release asset
         shell: bash
@@ -120,7 +120,7 @@ jobs:
         run: choco install innosetup --yes --no-progress
 
       - name: Build Electrobun Windows package
-        run: bun run package:windows
+        run: bun run package
 
       - name: Prepare Windows installer payload
         shell: pwsh

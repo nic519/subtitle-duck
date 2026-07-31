@@ -3,6 +3,11 @@ import {
   DEV_SERVER_URL,
 } from "../dev-server.config";
 
+const electrobun = Bun.which("electrobun");
+if (!electrobun) {
+  throw new Error("Electrobun CLI 未安装，请先运行 bun install");
+}
+
 const vite = Bun.spawn([
   process.execPath,
   "node_modules/vite/bin/vite.js",
@@ -44,7 +49,7 @@ process.once("SIGTERM", stop);
 
 try {
   await waitForRenderer();
-  desktop = Bun.spawn(["node_modules/electrobun/bin/electrobun", "dev", "--watch"], {
+  desktop = Bun.spawn([electrobun, "dev", "--watch"], {
     cwd: process.cwd(),
     env: { ...process.env, ELECTROBUN_RENDERER_URL: DEV_SERVER_URL },
     stdin: "inherit",

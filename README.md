@@ -38,11 +38,8 @@
 ```bash
 bun install
 
-# 启动 Web UI
+# 启动桌面开发环境
 bun run dev
-
-# 启动 Electrobun 桌面开发环境
-bun run dev:desktop
 ```
 
 本地字幕生成和字幕合并需要可用的 FFmpeg；字幕生成还需要 Whisper / faster-whisper 运行环境和模型。
@@ -50,11 +47,8 @@ bun run dev:desktop
 ## 常用命令
 
 ```bash
-bun run build          # 类型检查并构建 Web UI
-bun test               # 运行测试
-bun run lint           # 运行 ESLint
-bun run build:desktop  # 构建桌面应用
-bun run package:mac   # 打包 macOS 发布包
-bun run package:windows
+bun run build    # 构建当前平台的桌面应用
+bun run verify   # 启动并验证当前平台的本地构建
+bun run package  # 打包当前平台的发布产物
+bun test         # 运行测试
 ```
- 
