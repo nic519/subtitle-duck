@@ -427,21 +427,35 @@ const FfmpegInstallGuide = ({
 const FasterWhisperInstallGuide = ({
   onRefresh,
   darkMode,
+  pythonPath,
+  packageMissing,
 }: {
   onRefresh: () => void | Promise<void>;
   darkMode: boolean;
+  pythonPath: string;
+  packageMissing: boolean;
 }) => (
   <DependencyGuide
-    title="配置 Faster Whisper"
-    description="需要 Python、faster-whisper 包和已下载的 CT2 模型目录。安装后在上方分别选择 Python 与模型目录。"
+    title={packageMissing ? "安装 faster-whisper" : "配置 Faster Whisper"}
+    description={
+      packageMissing
+        ? "在终端运行下面的命令；安装到当前选择的 Python 环境后，点击重新检测。"
+        : "需要 Python、faster-whisper 包和已下载的 CT2 模型目录。安装后在上方分别选择 Python 与模型目录。"
+    }
     onRefresh={onRefresh}
     darkMode={darkMode}
   >
     <div className="grid gap-2">
-      <div>安装 Python 包</div>
-      <InstallCommand>python3 -m pip install --upgrade faster-whisper huggingface_hub</InstallCommand>
-      <div>下载模型（示例）</div>
-      <InstallCommand>huggingface-cli download Systran/faster-whisper-large-v3 --local-dir ~/Models/faster-whisper-large-v3</InstallCommand>
+      {packageMissing ? (
+        <InstallCommand>{`${pythonPath} -m pip install faster-whisper`}</InstallCommand>
+      ) : (
+        <>
+          <div>安装 Python 包</div>
+          <InstallCommand>{`${pythonPath} -m pip install --upgrade faster-whisper huggingface_hub`}</InstallCommand>
+          <div>下载模型（示例）</div>
+          <InstallCommand>huggingface-cli download Systran/faster-whisper-large-v3 --local-dir ~/Models/faster-whisper-large-v3</InstallCommand>
+        </>
+      )}
     </div>
   </DependencyGuide>
 );
@@ -1065,6 +1079,12 @@ export const SubtitleMuxPageContent = ({
               <FasterWhisperInstallGuide
                 onRefresh={onRefreshFasterWhisperStatus}
                 darkMode={darkMode}
+                pythonPath={fasterWhisperPythonPath?.trim() || "python3"}
+                packageMissing={Boolean(
+                  fasterWhisperStatus?.error?.startsWith(
+                    "所选 Python 未安装 faster-whisper",
+                  ),
+                )}
               />
             ) : null}
 
