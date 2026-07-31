@@ -49,7 +49,9 @@ process.once("SIGTERM", stop);
 
 try {
   await waitForRenderer();
-  desktop = Bun.spawn([electrobun, "dev", "--watch"], {
+  // Vite already watches renderer changes. Keep Electrobun in one-shot mode so
+  // closing the desktop app also ends this script and releases Vite's port.
+  desktop = Bun.spawn([electrobun, "dev"], {
     cwd: process.cwd(),
     env: { ...process.env, ELECTROBUN_RENDERER_URL: DEV_SERVER_URL },
     stdin: "inherit",

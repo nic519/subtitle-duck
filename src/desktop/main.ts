@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { BrowserView, BrowserWindow, Utils } from "electrobun/bun";
+import { ApplicationMenu, BrowserView, BrowserWindow, Utils } from "electrobun/bun";
 import { configGet, configSet } from "./configStore";
 import {
   chooseFasterWhisperModelDirectory,
@@ -33,6 +33,31 @@ const fileDropBroker = createLocalFileDropBroker();
 const nativeFileDropBridge = installNativeFileDropBridge((paths) => {
   fileDropBroker.publish(paths);
 });
+
+// 注册 macOS 原生菜单，让菜单、系统快捷键和窗口控制按钮复用平台默认行为。
+ApplicationMenu.setApplicationMenu([
+  {
+    label: "字幕鸭",
+    submenu: [
+      { role: "hide", accelerator: "CommandOrControl+H" },
+      { role: "hideOthers", accelerator: "CommandOrControl+Alt+H" },
+      { role: "showAll" },
+      { type: "separator" },
+      { role: "quit", accelerator: "CommandOrControl+Q" },
+    ],
+  },
+  {
+    label: "窗口",
+    submenu: [
+      { role: "minimize", accelerator: "CommandOrControl+M" },
+      { role: "zoom" },
+      { type: "separator" },
+      { role: "close", accelerator: "CommandOrControl+W" },
+      { type: "separator" },
+      { role: "toggleFullScreen" },
+    ],
+  },
+]);
 
 const getCliStatus = async (executable: string, args: string[]) => {
   const path = resolveCliExecutable(executable);
