@@ -128,7 +128,11 @@ jobs:
           $ErrorActionPreference = "Stop"
           $tarZst = Get-ChildItem artifacts\*-win-x64-subtitle-duck.tar.zst | Select-Object -First 1
           # Electrobun 2 的 npm 包仅提供入口，解压工具随构建产物分发。
-          $zstd = Get-ChildItem build\stable-win-x64 -Recurse -Filter zig-zstd.exe | Select-Object -First 1
+          # Electrobun 2 通常把解压工具放在 npm 包内；保留构建目录回退以兼容不同 runner 缓存布局。
+          $zstd = Get-ChildItem node_modules\electrobun -Recurse -Filter zig-zstd.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $zstd) {
+            $zstd = Get-ChildItem build\stable-win-x64 -Recurse -Filter zig-zstd.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
           if (-not $tarZst) { throw "Windows update tarball not found." }
           if (-not $zstd) { throw "zig-zstd.exe not found." }
 
