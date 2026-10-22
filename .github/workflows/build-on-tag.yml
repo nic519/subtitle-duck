@@ -126,25 +126,22 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          # Electrobun 2 的 npm 包仅提供入口，解压工具随构建产物分发。
-          $tarZst = Get-ChildItem artifacts -Recurse -File -Filter *.tar.zst -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -like "*win-x64*" } | Select-Object -First 1
-          # Electrobun 2 的工具位置会随 runner 缓存布局变化，递归查找实际产物。
-          $zstd = Get-ChildItem node_modules,build -Recurse -File -Filter zig-zstd.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $tarZst) {
-            Get-ChildItem artifacts -Recurse -Force -ErrorAction SilentlyContinue | Format-Table FullName,Length
-            throw "Windows update tarball not found."
-          }
-          if (-not $zstd) { throw "zig-zstd.exe not found." }
-
-          New-Item -ItemType Directory -Force portable-work | Out-Null
-          & $zstd.FullName decompress -i $tarZst.FullName -o portable-work\subtitle-duck.tar
-          tar -xf portable-work\subtitle-duck.tar -C portable-work
-
-          $launcher = Get-ChildItem portable-work -Recurse -File -Filter launcher.exe | Select-Object -First 1
+          $launcher = Get-ChildItem build\stable-win-x64 -Recurse -File -Filter launcher.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $launcher) {
-            Get-ChildItem portable-work -Recurse -Force | Format-Table FullName,Length
-            throw "Windows launcher.exe not found after extracting build payload."
+            # 兼容旧版 Electrobun：只有构建目录没有 launcher 时才解压更新包。
+            $tarZst = Get-ChildItem artifacts -Recurse -File -Filter *.tar.zst -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -like "*win-x64*" } | Select-Object -First 1
+            $zstd = Get-ChildItem node_modules,build -Recurse -File -Filter zig-zstd.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $tarZst) { throw "Windows update tarball not found." }
+            if (-not $zstd) { throw "zig-zstd.exe not found." }
+            New-Item -ItemType Directory -Force portable-work | Out-Null
+            & $zstd.FullName decompress -i $tarZst.FullName -o portable-work\subtitle-duck.tar
+            tar -xf portable-work\subtitle-duck.tar -C portable-work
+            $launcher = Get-ChildItem portable-work -Recurse -File -Filter launcher.exe | Select-Object -First 1
+          }
+          if (-not $launcher) {
+            Get-ChildItem build,portable-work -Recurse -Force -ErrorAction SilentlyContinue | Format-Table FullName,Length
+            throw "Windows launcher.exe not found in build or update payload."
           }
           $launcher.Directory.Parent.FullName | Set-Content portable-work\source-dir.txt
 
