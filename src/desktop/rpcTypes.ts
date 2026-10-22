@@ -1,3 +1,4 @@
+import type { ManagedWhisperRequest, ManagedWhisperSnapshot } from "./transcription/managedWhisper";
 import type { VideoMetadata } from "./videoMetadata";
 import type { RPCSchema } from "electrobun/bun";
 import type { SubtitleMuxProgress } from "./subtitles/subtitleMux";
@@ -54,6 +55,10 @@ export type DesktopRPC = {
       cancelTranslateSubtitleFile: { params: { subtitlePath: string }; response: void };
       testSubtitleTranslationConnection: { params: { proxyUrl?: string | null }; response: { available: boolean; error: string | null } };
       getFfmpegStatus: { params: void; response: CliStatus };
+      getManagedWhisper: { params: void; response: ManagedWhisperSnapshot };
+      detectWhisperUv: { params: void; response: ManagedWhisperSnapshot };
+      startManagedWhisper: { params: ManagedWhisperRequest; response: void };
+      cancelManagedWhisper: { params: void; response: void };
       getFasterWhisperStatus: { params: void; response: FasterWhisperStatus };
     };
     messages: {

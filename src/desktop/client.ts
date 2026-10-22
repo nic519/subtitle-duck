@@ -1,3 +1,4 @@
+import type { ManagedWhisperRequest, ManagedWhisperSnapshot } from "./transcription/managedWhisper";
 import { createSubtitleGenerationBatch } from "../subtitle-mux/subtitleGenerationBatch";
 import Electrobun, { Electroview } from "electrobun/view";
 import { DESKTOP_RPC_MAX_REQUEST_TIME_MS } from "./rpcRequestPolicy";
@@ -100,6 +101,10 @@ export const desktopApi = {
   getLocalVideoPreviewUrl: (videoPath: string) => electrobun?.rpc.request.getLocalVideoPreviewUrl({ videoPath }) ?? unavailable("预览本地视频"),
   getCompatibleVideoPreviewUrl: (videoPath: string) => electrobun?.rpc.request.getCompatibleVideoPreviewUrl({ videoPath }) ?? unavailable("转换视频预览"),
   getFfmpegStatus: () => electrobun?.rpc.request.getFfmpegStatus() ?? Promise.resolve({ available: false, path: null, version: null, error: "仅桌面端支持" }),
+  getManagedWhisper: (): Promise<ManagedWhisperSnapshot | null> => electrobun?.rpc.request.getManagedWhisper() ?? Promise.resolve(null),
+  detectWhisperUv: (): Promise<ManagedWhisperSnapshot | null> => electrobun?.rpc.request.detectWhisperUv() ?? Promise.resolve(null),
+  startManagedWhisper: (request: ManagedWhisperRequest) => electrobun?.rpc.request.startManagedWhisper(request) ?? unavailable("安装识别环境或下载模型"),
+  cancelManagedWhisper: () => electrobun?.rpc.request.cancelManagedWhisper() ?? unavailable("取消下载"),
   getFasterWhisperStatus: () => electrobun?.rpc.request.getFasterWhisperStatus() ?? Promise.resolve({ available: false, path: null, version: null, error: "仅桌面端支持" }),
   mergeVideoWithSubtitle(input: { videoPath: string; subtitlePath: string; outputPath: string }) {
     return electrobun?.rpc.request.mergeVideoWithSubtitle(input) ?? unavailable("封装字幕");

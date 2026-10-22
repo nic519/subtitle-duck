@@ -1,3 +1,6 @@
+import { probeWhisperReadiness } from "./transcription/whisperReadiness";
+import { join } from "node:path";
+import { createManagedWhisper } from "./transcription/managedWhisper";
 import { probeVideoMetadata } from "./videoMetadata";
 import { existsSync } from "node:fs";
 import Electrobun, { ApplicationMenu, BrowserView, BrowserWindow, Utils } from "electrobun/bun";
@@ -26,6 +29,13 @@ import {
   probeWhisperVideoDurationMs,
   transcribeVideoSubtitleRanges,
 } from "./transcription/whisperTranscription";
+
+const managedWhisper = createManagedWhisper({
+  root: join(Utils.paths.userData, "faster-whisper"),
+  savePython: async path => { await configSet("faster_whisper_python_path", path); },
+  saveModel: async path => { await configSet("faster_whisper_model_path", path); },
+  getConfig: () => getFasterWhisperConfig(),
+});
 
 let mainWindow: BrowserWindow | null = null;
 const activeTranscriptions = new Map<string, AbortController>();
@@ -110,7 +120,11 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
     requests: {
       isWindowMaximized: () => mainWindow?.isMaximized() ?? false,
       configGet: ({ key }) => configGet(key),
-      configSet: async ({ key, value }) => (await configSet(key, value)) ?? "",
+      configSet: async ({ key, value }) => {
+        const saved = (await configSet(key, value)) ?? "";
+        if (key === "faster_whisper_python_path" || key === "faster_whisper_model_path") await managedWhisper.refreshComponents();
+        return saved;
+      },
       openFilePath: ({ filePath }) => openFilePath(filePath),
       revealFilePath: ({ filePath }) => revealFilePath(filePath),
       selectSubtitleMuxVideoFile: () => chooseSubtitleMuxFile({ openFileDialog: Utils.openFileDialog, allowedFileTypes: "mp4,mkv,avi,mov,wmv,m4v,ts,webm" }),
@@ -137,7 +151,18 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
         };
       },
       getFfmpegStatus: async () => getCliStatus(await getFfmpegPath(), ["-version"]),
-      getFasterWhisperStatus: async () => getFasterWhisperStatus(await getFasterWhisperConfig()),
+      getManagedWhisper: () => managedWhisper.snapshot(),
+      detectWhisperUv: async () => { await managedWhisper.detectUv(); return managedWhisper.snapshot(); },
+      startManagedWhisper: request => {
+        if ((request.kind === "install" || request.kind === "prepare") && activeTranscriptions.size) throw new Error("请等待字幕生成完成后安装环境");
+        managedWhisper.start(request);
+      },
+      cancelManagedWhisper: () => managedWhisper.cancel(),
+      getFasterWhisperStatus: async () => {
+        const config = await getFasterWhisperConfig();
+        const components = await probeWhisperReadiness(config);
+        return { available: components.whisper.ready && components.model.ready, path: config.pythonPath, version: components.whisper.version, error: components.python.error || components.whisper.error || (config.modelPath ? components.model.error : null), components };
+      },
       mergeVideoWithSubtitle: async ({ videoPath, subtitlePath, outputPath }) =>
         mergeVideoWithSubtitle(
           {
@@ -243,6 +268,7 @@ if (Bun.env.SUBTITLE_DUCK_VERIFY_LOCAL_APP === "1") {
 }
 
 process.once("exit", () => {
+  managedWhisper.cancel();
   activeTranscriptions.forEach((controller) => controller.abort());
   activeSubtitleTranslations.forEach((controller) => controller.abort());
   previewServer.stop();

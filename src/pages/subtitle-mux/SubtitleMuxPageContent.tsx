@@ -1,3 +1,4 @@
+import { ManagedWhisperPanel } from "./ManagedWhisperPanel";
 import { fasterWhisperModels, getFasterWhisperDownloadCommand } from "../../subtitle-mux/fasterWhisperModels";
 import type { SubtitleGenerationBatchSnapshot } from "../../subtitle-mux/subtitleGenerationBatch";
 import { SubtitleGenerationBatchList } from "./SubtitleGenerationBatchList";
@@ -187,7 +188,7 @@ const subtitleTools: Array<{
   label: string;
   icon: LucideIcon;
 }> = [
-  { id: "merge", label: "字幕合并", icon: Combine },
+  { id: "merge", label: "视字合并", icon: Combine },
   { id: "generate", label: "字幕生成", icon: Captions },
   { id: "translate", label: "字幕翻译", icon: Languages },
 ];
@@ -503,8 +504,9 @@ const FasterWhisperInstallGuide = ({
     <DependencyGuide darkMode={darkMode}>
       <div className="grid min-w-0 items-start gap-x-4 gap-y-4 lg:grid-cols-2">
         <div className="grid min-w-0 gap-2">
-          <div className="flex h-8 items-center">安装 Python 包</div>
-          <InstallCommand>{`${pythonPath} -m pip install --upgrade faster-whisper huggingface_hub`}</InstallCommand>
+          <div className="flex h-8 items-center">手动安装 · macOS / Linux</div>
+          <InstallCommand>{`uv venv --python 3.12 ~/.venvs/subtitle-duck\nuv pip install --python ~/.venvs/subtitle-duck/bin/python faster-whisper==1.2.1 huggingface-hub==0.36.0\nsource ~/.venvs/subtitle-duck/bin/activate`}</InstallCommand>
+          <p>安装后将运行环境设为该虚拟环境的 Python。当前配置：<span className="break-all">{pythonPath}</span></p>
         </div>
         <div className="grid min-w-0 gap-2">
           <div className="flex min-w-0 items-center gap-2">
@@ -629,6 +631,7 @@ export const SubtitleMuxPageContent = ({
   onClearTranslation,
   onRevealOutput,
 }: SubtitleMuxPageContentProps) => {
+  const [managedWhisperLog, setManagedWhisperLog] = useState("");
   const hasGenerationBatch = generationBatch.items.length > 0;
   const previewPlayback = useVideoPreviewPlayback(generationVideoPreview);
   const [generationDropNotice, setGenerationDropNotice] = useState<
@@ -653,11 +656,6 @@ export const SubtitleMuxPageContent = ({
   const ffmpegStatusTitle = [ffmpegStatusLabel, ffmpegStatus?.error]
     .filter(Boolean)
     .join(" · ");
-  const fasterWhisperStatusState = fasterWhisperStatus
-    ? fasterWhisperStatus.available
-      ? "available"
-      : "unavailable"
-    : "checking";
   const subtitleTranslationTargetLabel =
     subtitleTranslationLanguageOptions.find(
       (option) => option.value === subtitleTranslationTargetLanguage,
@@ -778,9 +776,15 @@ export const SubtitleMuxPageContent = ({
                 draggable={false}
                 className="size-11 select-none rounded-[10px] shadow-[0_10px_22px_-16px_rgba(0,0,0,0.8)]"
               />
-              <span className="min-w-0 text-[15px] font-semibold tracking-[0.08em] text-foreground">
-                字幕鸭
-              </span>
+              <div className="min-w-0">
+                <span className="text-[15px] font-semibold tracking-[0.08em] text-foreground">
+                  字幕鸭
+                </span>
+                {/* 版本由 Vite 从 package.json 注入，与桌面打包版本保持一致。 */}
+                <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground" aria-label="应用版本">
+                  v{__APP_VERSION__}
+                </p>
+              </div>
             </div>
             <nav
               data-subtitle-tool-nav="true"
@@ -856,10 +860,6 @@ export const SubtitleMuxPageContent = ({
                   </PopoverPrimitive.Content>
                 </PopoverPrimitive.Portal>
               </PopoverPrimitive.Root>
-              {/* 版本由 Vite 从 package.json 注入，与桌面打包版本保持一致。 */}
-              <p className="px-1.5 pt-1 text-[length:var(--font-size-caption)] text-muted-foreground" aria-label="应用版本">
-                字幕鸭 v{__APP_VERSION__}
-              </p>
             </div>
           </>
         }
@@ -1071,43 +1071,6 @@ export const SubtitleMuxPageContent = ({
               id="settings"
               number="02"
               title="Faster Whisper"
-              titleAccessory={
-                <div className="ml-auto flex items-center gap-2">
-                <span
-                  data-subtitle-tool-faster-whisper-status={fasterWhisperStatusState}
-                  className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] ${
-                    fasterWhisperStatusState === "available"
-                      ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
-                      : fasterWhisperStatusState === "unavailable"
-                        ? "bg-[var(--status-error-bg)] text-[var(--status-error-text)]"
-                        : "bg-[var(--control-fill)] text-muted-foreground"
-                  }`}
-                >
-                  {fasterWhisperStatusState === "available" ? (
-                    <CircleCheck className="size-3" aria-label="可用" />
-                  ) : fasterWhisperStatusState === "unavailable" ? (
-                    <CircleX className="size-3" aria-label="不可用" />
-                  ) : (
-                    <LoaderCircle className="size-3" aria-label="检测中" />
-                  )}
-                  {fasterWhisperStatusState === "available"
-                    ? "就绪"
-                    : fasterWhisperStatusState === "unavailable"
-                      ? "不可用"
-                      : "检测中"}
-                </span>
-                <ToolbarIconButton
-                  darkMode={darkMode}
-                  onClick={() => void onRefreshFasterWhisperStatus()}
-                  disabled={isGenerating || fasterWhisperStatusState === "checking"}
-                  aria-label="重新检测 Faster Whisper"
-                  title="重新检测"
-                  className="h-7 w-7 bg-transparent"
-                >
-                  <RefreshCw className={`size-3.5 ${fasterWhisperStatusState === "checking" ? "animate-spin" : ""}`} />
-                </ToolbarIconButton>
-                </div>
-              }
               state={generationStepStates.settings}
               isLast={hasGenerationBatch}
             >
@@ -1116,15 +1079,9 @@ export const SubtitleMuxPageContent = ({
                 data-subtitle-transcription-engine="faster-whisper"
                 className="grid min-w-0 content-start gap-2"
               >
-                <div className="grid min-w-0 gap-3 border-l-2 border-[var(--subtitle-accent-border)] pl-3">
-                      {fasterWhisperStatus?.error ? (
-                        <div
-                          className="truncate text-[length:var(--font-size-caption)] text-[var(--status-error-text)]"
-                          title={fasterWhisperStatus.error}
-                        >
-                          {fasterWhisperStatus.error}
-                        </div>
-                      ) : null}
+                <details className="min-w-0 text-[length:var(--font-size-caption)]">
+                  <summary className="cursor-pointer text-muted-foreground">手动配置</summary>
+                  {fasterWhisperStatus?.error && <p className="my-2 break-words text-muted-foreground">{fasterWhisperStatus.error}</p>}
                       <div className="grid min-w-0 gap-x-4 gap-y-2 lg:grid-cols-2 text-[length:var(--font-size-caption)]">
                         <div className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2">
                           <span className="whitespace-nowrap text-muted-foreground">
@@ -1206,7 +1163,7 @@ export const SubtitleMuxPageContent = ({
                           </ToolbarIconButton>
                         </div>
                       </div>
-                    </div>
+                </details>
               </div>
             {ffmpegUnavailable ? (
               <FfmpegInstallGuide
@@ -1215,17 +1172,18 @@ export const SubtitleMuxPageContent = ({
               />
             ) : null}
 
-            {fasterWhisperUnavailable ? (
-              <FasterWhisperInstallGuide
-                darkMode={darkMode}
-                pythonPath={fasterWhisperPythonPath?.trim() || "python3"}
-              />
-            ) : (
-              <details className="mt-4 text-[length:var(--font-size-caption)] text-muted-foreground">
-                <summary className="cursor-pointer">下载其他模型</summary>
-                <FasterWhisperInstallGuide darkMode={darkMode} pythonPath={fasterWhisperPythonPath?.trim() || "python3"} />
-              </details>
-            )}
+            <ManagedWhisperPanel
+              darkMode={darkMode}
+              disabled={isGenerating}
+              currentModel={fasterWhisperModelPath}
+              onUseModel={onSaveFasterWhisperModelPath}
+              onLogChanged={setManagedWhisperLog}
+              onEnvironmentChanged={async path => {
+                await onChangeFasterWhisperPythonPath(path);
+                await onRefreshFasterWhisperStatus();
+              }}
+            />
+
 
             </WorkflowStep>
 
@@ -1343,6 +1301,16 @@ export const SubtitleMuxPageContent = ({
             </WorkflowStep> : generationStatusTone === "error" && generationStatusMessage ? (
               <StatusMessage tone="error">{generationStatusMessage}</StatusMessage>
             ) : null}
+            <div className="mt-4 text-[length:var(--font-size-caption)] text-muted-foreground">
+              <details>
+                <summary className="cursor-pointer">手动安装与模型下载链接</summary>
+                <FasterWhisperInstallGuide darkMode={darkMode} pythonPath={fasterWhisperPythonPath?.trim() || "python3"} />
+              </details>
+              {managedWhisperLog && <details className="mt-3">
+                <summary className="cursor-pointer">安装与下载日志</summary>
+                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px]">{managedWhisperLog}</pre>
+              </details>}
+            </div>
           </div>
         </section>
 
