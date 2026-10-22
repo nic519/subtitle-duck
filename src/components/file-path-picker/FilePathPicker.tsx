@@ -29,6 +29,8 @@ export const FilePathPicker = ({
   fillHeight = false,
   integratedCard = false,
   showHeader = true,
+  compact = false,
+  accessory,
   onChoose,
   onUsePath,
   onDropPaths,
@@ -46,14 +48,24 @@ export const FilePathPicker = ({
   fillHeight?: boolean;
   integratedCard?: boolean;
   showHeader?: boolean;
+  compact?: boolean;
+  accessory?: ReactNode;
   onChoose: () => void | Promise<void>;
   onUsePath: (path: string) => void;
   onDropPaths: (paths: string[]) => void;
 }) => {
-  const [draftPath, setDraftPath] = useState("");
+  const [draftPath, setDraftPath] = useState(selectedPath ?? "");
   const [isDragActive, setIsDragActive] = useState(false);
-  const lastAppliedPathRef = useRef("");
+  const lastAppliedPathRef = useRef(selectedPath ?? "");
   const autoApplyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 拖放、文件选择和清空共用已选路径；同步时标记已提交，避免再次自动读取。
+  useEffect(() => {
+    if (autoApplyTimerRef.current) clearTimeout(autoApplyTimerRef.current);
+    autoApplyTimerRef.current = null;
+    lastAppliedPathRef.current = selectedPath ?? "";
+    setDraftPath(selectedPath ?? "");
+  }, [selectedPath]);
 
   useEffect(() => {
     return () => {
@@ -134,7 +146,7 @@ export const FilePathPicker = ({
           {label}
         </div>
       ) : null}
-      {selectedPath && !integratedCard ? (
+      {selectedPath && !integratedCard && !compact ? (
         <div
           {...selectedPathDataAttribute}
           className={`break-all text-[length:var(--font-size-caption)] text-foreground ${
@@ -151,7 +163,9 @@ export const FilePathPicker = ({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={`grid min-w-0 gap-2 rounded-[8px] border transition-colors ${
-          integratedCard
+          compact
+            ? "p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+            : integratedCard
             ? "content-start p-2.5"
             : showHeader
               ? "px-2.5 py-2 sm:grid-cols-[minmax(120px,0.42fr)_minmax(180px,1fr)] sm:items-center"
@@ -170,7 +184,7 @@ export const FilePathPicker = ({
             {label}
           </div>
         ) : null}
-        <div className="min-w-0">
+        {!compact ? <div className="min-w-0">
           <div
             className={`${showHeader ? "truncate" : ""} text-[length:var(--font-size-caption)] font-medium text-foreground`}
           >
@@ -182,7 +196,8 @@ export const FilePathPicker = ({
             粘贴后自动确认；可拖入本地文件。
           </div>
         </div>
-        {selectedPath && integratedCard ? (
+        : null}
+        {selectedPath && integratedCard && !compact ? (
           <div
             {...selectedPathDataAttribute}
             title={selectedPath}
@@ -199,6 +214,10 @@ export const FilePathPicker = ({
           }`}
         >
           <Input
+            {...(compact ? selectedPathDataAttribute : {})}
+            aria-label={label + "路径"}
+            title={draftPath}
+            disabled={disabled}
             value={draftPath}
             onChange={(event) => setDraftPath(event.target.value)}
             onKeyDown={(event) => {
@@ -219,6 +238,7 @@ export const FilePathPicker = ({
             {chooseLabel}
           </ToolbarButton>
         </div>
+        {accessory}
       </div>
     </div>
   );

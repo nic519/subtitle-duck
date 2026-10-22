@@ -75,6 +75,7 @@ export const desktopApi = {
   selectFasterWhisperPythonFile: () => electrobun?.rpc.request.selectFasterWhisperPythonFile() ?? unavailable("选择 Python"),
   selectFasterWhisperModelDirectory: () => electrobun?.rpc.request.selectFasterWhisperModelDirectory() ?? unavailable("选择 Faster Whisper 模型"),
   consumeLocalFileDrop: () => electrobun?.rpc.request.consumeLocalFileDrop() ?? Promise.resolve({ paths: [] }),
+  getVideoMetadata: (videoPath: string) => electrobun?.rpc.request.getVideoMetadata({ videoPath }) ?? unavailable("读取视频信息"),
   getWhisperVideoDuration: (videoPath: string) => electrobun?.rpc.request.getWhisperVideoDuration({ videoPath }) ?? unavailable("读取视频时长"),
   getLocalVideoPreviewUrl: (videoPath: string) => electrobun?.rpc.request.getLocalVideoPreviewUrl({ videoPath }) ?? unavailable("预览本地视频"),
   getCompatibleVideoPreviewUrl: (videoPath: string) => electrobun?.rpc.request.getCompatibleVideoPreviewUrl({ videoPath }) ?? unavailable("转换视频预览"),

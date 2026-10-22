@@ -40,6 +40,7 @@ import {
 import { Popover as PopoverPrimitive } from "radix-ui";
 import type { SubtitleGenerationSegment } from "../../subtitle-mux/subtitleGenerationSegments";
 import type { VideoPreviewSource } from "../../subtitle-mux/videoPreviewSession";
+import { VideoInfo } from "@/components/video-info/VideoInfo";
 import { SubtitleGenerationSegmentEditor } from "./SubtitleGenerationSegmentEditor";
 import { SubtitleMergeDropzone } from "./SubtitleMergeDropzone";
 import { useVideoPreviewPlayback } from "./useVideoPreviewPlayback";
@@ -983,6 +984,12 @@ export const SubtitleMuxPageContent = ({
               <div className="min-w-0">
               <FilePathPicker
                 id="subtitle-generate-video"
+                compact
+                accessory={generationVideoPath ? (
+                  <div className="sm:max-w-[340px]">
+                    <VideoInfo videoPath={generationVideoPath} />
+                  </div>
+                ) : null}
                 darkMode={darkMode}
                 label="视频"
                 icon={<Video className="size-4 shrink-0" />}
@@ -990,7 +997,7 @@ export const SubtitleMuxPageContent = ({
                 selectedPathDataAttribute={{
                   "data-subtitle-generate-selected-path": "video",
                 }}
-                placeholder="粘贴本地视频路径"
+                placeholder="拖入视频或粘贴本地路径"
                 dropTitle="拖入视频文件"
                 chooseLabel="选择视频"
                 showHeader={false}

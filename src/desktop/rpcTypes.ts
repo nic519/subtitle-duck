@@ -1,3 +1,4 @@
+import type { VideoMetadata } from "./videoMetadata";
 import type { RPCSchema } from "electrobun/bun";
 import type { SubtitleMuxProgress } from "./subtitles/subtitleMux";
 import type {
@@ -41,6 +42,7 @@ export type DesktopRPC = {
       selectFasterWhisperPythonFile: { params: void; response: string | null };
       selectFasterWhisperModelDirectory: { params: void; response: string | null };
       consumeLocalFileDrop: { params: void; response: { paths: string[] } };
+      getVideoMetadata: { params: { videoPath: string }; response: VideoMetadata };
       getWhisperVideoDuration: { params: { videoPath: string }; response: { durationMs: number } };
       getLocalVideoPreviewUrl: { params: { videoPath: string }; response: { url: string } };
       getCompatibleVideoPreviewUrl: { params: { videoPath: string }; response: { url: string; reused: boolean } };

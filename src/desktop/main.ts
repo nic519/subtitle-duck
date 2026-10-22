@@ -1,3 +1,4 @@
+import { probeVideoMetadata } from "./videoMetadata";
 import { existsSync } from "node:fs";
 import Electrobun, { ApplicationMenu, BrowserView, BrowserWindow, Utils } from "electrobun/bun";
 import { configGet, configSet } from "./configStore";
@@ -107,6 +108,7 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
       consumeLocalFileDrop: async () => ({
         paths: process.platform === "darwin" ? await fileDropBroker.consume() : [],
       }),
+      getVideoMetadata: async ({ videoPath }) => probeVideoMetadata(videoPath, resolveWithConfiguredFfmpeg(await getFfmpegPath())),
       getWhisperVideoDuration: async ({ videoPath }) => ({
         durationMs: await probeWhisperVideoDurationMs(videoPath, {
           resolveExecutable: resolveWithConfiguredFfmpeg(await getFfmpegPath()),

@@ -1,3 +1,4 @@
+import { VideoInfo } from "@/components/video-info/VideoInfo";
 import { useState, type DragEventHandler } from "react";
 import { FileVideo, FolderOpen, Languages, Plus } from "lucide-react";
 import { ToolbarButton } from "@/components/page-ui";
@@ -155,6 +156,7 @@ export const SubtitleMergeDropzone = ({
           disabled={disabled}
           darkMode={darkMode}
         />
+        {videoPath ? <div className="px-3 pb-1"><VideoInfo videoPath={videoPath} /></div> : null}
         <SelectedFile
           kind="subtitle"
           path={subtitlePath}
