@@ -92,6 +92,9 @@ export const SubtitleMuxPage = ({
   >([]);
   const [activeTool, setActiveTool] =
     useState<SubtitleToolId>(initialActiveTool);
+  const [generationBatch, setGenerationBatch] = useState(desktopApi.subtitleGenerationBatch.getSnapshot);
+  useEffect(() => desktopApi.subtitleGenerationBatch.subscribe(setGenerationBatch), []);
+  const hasGenerationBatch = generationBatch.items.length > 0;
   const [generationVideoPath, setGenerationVideoPath] = useState<string | null>(null);
   const [generationVideoPreview, setGenerationVideoPreview] =
     useState<VideoPreviewSource | null>(null);
@@ -182,7 +185,9 @@ export const SubtitleMuxPage = ({
     [generationSegments]
   );
 
-  const canGenerateSubtitle = Boolean(
+  const canGenerateSubtitle = hasGenerationBatch
+    ? !generationBatch.running && generationBatch.items.some(item => item.status !== "completed") && fasterWhisperStatus?.available !== false
+    : Boolean(
       generationVideoPath &&
       generationDurationMs !== null &&
       generationRanges.length > 0 &&
@@ -389,6 +394,8 @@ export const SubtitleMuxPage = ({
     let hydratedTaskInput: object | null = null;
 
     const unsubscribe = desktopApi.onWhisperTranscriptionTaskChange((task) => {
+      // 批量有独立的列表状态，不能让其中一个任务覆盖单视频的预览与片段。
+      if (desktopApi.subtitleGenerationBatch.getSnapshot().items.length > 0) return;
       if (task.status === "idle" || !task.input) return;
       if (hydratedTaskInput !== task.input) {
         hydratedTaskInput = task.input;
@@ -430,7 +437,11 @@ export const SubtitleMuxPage = ({
     try {
       const selectedPath = await desktopApi.selectSubtitleMuxVideoFile();
       if (!selectedPath) return;
-      await loadGenerationVideo(selectedPath);
+      if (desktopApi.subtitleGenerationBatch.getSnapshot().items.length > 0) {
+        desktopApi.subtitleGenerationBatch.add([selectedPath]);
+      } else {
+        await loadGenerationVideo(selectedPath);
+      }
     } catch (error) {
       setGenerationStatus({
         tone: "error",
@@ -440,15 +451,21 @@ export const SubtitleMuxPage = ({
   };
 
   const handleDropGenerationVideoPaths = (paths: string[]) => {
-    const selectedPath = paths.find((path) => path.trim().length > 0);
-    if (!selectedPath) {
-      setGenerationStatus({
-        tone: "error",
-        message: "拖放没有读取到视频文件，请重新拖入或使用选择视频",
-      });
+    if (isGenerating || desktopApi.subtitleGenerationBatch.getSnapshot().running) return;
+    const videoPaths = [...new Set(paths.map(path => path.trim()).filter(path => /\.(mp4|mkv|avi|mov|wmv|m4v|ts|webm)$/i.test(path)))];
+    if (videoPaths.length === 0) {
+      setGenerationStatus({ tone: "error", message: "拖放没有读取到视频文件，请重新拖入或使用选择视频" });
       return;
     }
-    void loadGenerationVideo(selectedPath);
+    const existing = desktopApi.subtitleGenerationBatch.getSnapshot();
+    const combined = [...new Set([...(generationVideoPath ? [generationVideoPath] : []), ...videoPaths])];
+    if (existing.items.length > 0 || combined.length > 1) {
+      desktopApi.subtitleGenerationBatch.add(combined);
+      videoPreviewSessionRef.current!.clear();
+      setGenerationStatus({ tone: "neutral", message: null });
+    } else {
+      void loadGenerationVideo(videoPaths[0]);
+    }
   };
 
   const useSubtitleTranslationPath = (path: string) => {
@@ -666,6 +683,15 @@ export const SubtitleMuxPage = ({
   };
 
   const handleGenerateSubtitle = async () => {
+    if (isGenerating || desktopApi.subtitleGenerationBatch.getSnapshot().running) return;
+    if (hasGenerationBatch) {
+      if (fasterWhisperStatus?.available === false) return;
+      await desktopApi.subtitleGenerationBatch.start();
+      if (desktopApi.subtitleGenerationBatch.getSnapshot().items.some(item => item.status === "completed")) {
+        void rememberSuccessfulFasterWhisperModel();
+      }
+      return;
+    }
     if (!generationVideoPath) {
       setGenerationStatus({ tone: "error", message: "请先选择视频文件" });
       return;
@@ -712,6 +738,11 @@ export const SubtitleMuxPage = ({
   };
 
   const handleCancelGenerateSubtitle = async () => {
+    if (desktopApi.subtitleGenerationBatch.getSnapshot().running) {
+      try { await desktopApi.subtitleGenerationBatch.cancel(); }
+      catch (error) { setGenerationStatus({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
+      return;
+    }
     if (!generationVideoPath || !isGenerating) return;
     try {
       await desktopApi.cancelTranscribeVideoSubtitle({
@@ -795,6 +826,8 @@ export const SubtitleMuxPage = ({
   };
 
   const handleClearGeneration = () => {
+    if (isGenerating || desktopApi.subtitleGenerationBatch.getSnapshot().running) return;
+    desktopApi.subtitleGenerationBatch.clear();
     desktopApi.clearCompletedWhisperTranscriptionTask();
     videoPreviewSessionRef.current!.clear();
     setGenerationVideoPath(null);
@@ -851,6 +884,12 @@ export const SubtitleMuxPage = ({
         videoPath={draft.videoPath}
         subtitlePath={draft.subtitlePath}
         outputPath={draft.outputPath}
+        generationBatch={generationBatch}
+        onRemoveBatchVideo={(path) => desktopApi.subtitleGenerationBatch.remove(path)}
+        onRevealBatchSubtitle={async (path) => {
+          try { await revealInFolder(path); }
+          catch (error) { setGenerationStatus({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
+        }}
         generationVideoPath={generationVideoPath}
         generationVideoPreview={generationVideoPreview}
         subtitleTranslationPath={subtitleTranslationPath}
@@ -870,7 +909,7 @@ export const SubtitleMuxPage = ({
         generationRangeError={generationRangeError}
         canStart={canStart}
         isMerging={isMerging}
-        isGenerating={isGenerating}
+        isGenerating={isGenerating || generationBatch.running}
         isTranslatingSubtitle={isTranslatingSubtitle}
         ffmpegStatus={ffmpegStatus}
         ffmpegPath={ffmpegPath}
@@ -879,11 +918,13 @@ export const SubtitleMuxPage = ({
         fasterWhisperModelPath={fasterWhisperModelPath}
         fasterWhisperModelHistory={fasterWhisperModelHistory}
         canGenerateSubtitle={canGenerateSubtitle}
-        isCancelingGeneration={isCancelingGeneration}
+        isCancelingGeneration={isCancelingGeneration || generationBatch.canceling}
         generatedSubtitlePath={generatedSubtitlePath}
         progressMessage={progressMessage}
         transcriptionProgressMessage={transcriptionProgressMessage}
-        transcriptionProgressPercent={transcriptionProgressPercent}
+        transcriptionProgressPercent={hasGenerationBatch
+          ? Math.round(generationBatch.items.reduce((sum, item) => sum + (item.status === "completed" ? 100 : item.percent ?? 0), 0) / generationBatch.items.length)
+          : transcriptionProgressPercent}
         muxDiagnostics={muxDiagnostics}
         transcriptionCommandLines={transcriptionCommandLines}
         mergeStatusTone={mergeStatus.tone}
@@ -928,7 +969,7 @@ export const SubtitleMuxPage = ({
         onChangeSubtitleTranslationProxyUrl={handleChangeSubtitleTranslationProxyUrl}
         onTestSubtitleTranslationConnection={handleTestSubtitleTranslationConnection}
         onCancelSubtitleTranslation={handleCancelSubtitleTranslation}
-        onUseGenerationVideoPath={(path) => void loadGenerationVideo(path)}
+        onUseGenerationVideoPath={(path) => hasGenerationBatch ? handleDropGenerationVideoPaths([path]) : void loadGenerationVideo(path)}
         onUseSubtitleTranslationPath={useSubtitleTranslationPath}
         onDropGenerationVideoPaths={handleDropGenerationVideoPaths}
         onDropSubtitleTranslationPaths={handleDropSubtitleTranslationPaths}

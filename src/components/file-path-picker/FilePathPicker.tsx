@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { FolderOpen } from "lucide-react";
-import { ToolbarButton } from "@/components/page-ui";
+import { ToolbarIconButton } from "@/components/page-ui";
 import { Input } from "@/components/ui/input";
 import { resolveLocalFileImport } from "@/local-file-import/localFileImport";
 
@@ -30,7 +30,6 @@ export const FilePathPicker = ({
   integratedCard = false,
   showHeader = true,
   compact = false,
-  accessory,
   onChoose,
   onUsePath,
   onDropPaths,
@@ -49,7 +48,6 @@ export const FilePathPicker = ({
   integratedCard?: boolean;
   showHeader?: boolean;
   compact?: boolean;
-  accessory?: ReactNode;
   onChoose: () => void | Promise<void>;
   onUsePath: (path: string) => void;
   onDropPaths: (paths: string[]) => void;
@@ -112,6 +110,7 @@ export const FilePathPicker = ({
   const handleDragOver: DragEventHandler<HTMLDivElement> = (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (disabled) return;
     event.dataTransfer.dropEffect = "copy";
     setIsDragActive(true);
   };
@@ -128,6 +127,7 @@ export const FilePathPicker = ({
     event.stopPropagation();
     setIsDragActive(false);
 
+    if (disabled) return;
     void resolveLocalFileImport(event.dataTransfer).then(onDropPaths);
   };
 
@@ -158,13 +158,14 @@ export const FilePathPicker = ({
       ) : null}
       <div
         data-file-path-picker-drop={id}
+        title={isDragActive ? dropTitle : undefined}
         onDragEnter={handleDragOver}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={`grid min-w-0 gap-2 rounded-[8px] border transition-colors ${
           compact
-            ? "p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+            ? "p-2"
             : integratedCard
             ? "content-start p-2.5"
             : showHeader
@@ -178,25 +179,12 @@ export const FilePathPicker = ({
               : "border-dashed border-white/20 bg-white/[0.02]"
         }`}
       >
-        {integratedCard ? (
+        {integratedCard && showHeader ? (
           <div className="flex items-center gap-2 text-[length:var(--font-size-caption)] text-muted-foreground">
             {icon}
             {label}
           </div>
         ) : null}
-        {!compact ? <div className="min-w-0">
-          <div
-            className={`${showHeader ? "truncate" : ""} text-[length:var(--font-size-caption)] font-medium text-foreground`}
-          >
-            {selectedPath ? dropTitle : `未选择 · ${dropTitle}`}
-          </div>
-          <div
-            className={`${showHeader ? "truncate" : ""} text-[length:var(--font-size-caption)] text-muted-foreground`}
-          >
-            粘贴后自动确认；可拖入本地文件。
-          </div>
-        </div>
-        : null}
         {selectedPath && integratedCard && !compact ? (
           <div
             {...selectedPathDataAttribute}
@@ -228,17 +216,17 @@ export const FilePathPicker = ({
             placeholder={placeholder}
             className={filePathPickerInputClassName}
           />
-          <ToolbarButton
+          <ToolbarIconButton
             darkMode={darkMode}
             onClick={() => void onChoose()}
             disabled={disabled}
+            aria-label={chooseLabel}
+            title={chooseLabel}
             className="subtitle-accent-action"
           >
             <FolderOpen className="size-3.5" />
-            {chooseLabel}
-          </ToolbarButton>
+          </ToolbarIconButton>
         </div>
-        {accessory}
       </div>
     </div>
   );

@@ -48,6 +48,19 @@ ApplicationMenu.setApplicationMenu([
       { role: "quit", accelerator: "CommandOrControl+Q" },
     ],
   },
+  // WKWebView 的编辑快捷键通过原生菜单角色分发给当前输入框。
+  {
+    label: "编辑",
+    submenu: [
+      { label: "撤销", role: "undo", accelerator: "CommandOrControl+Z" },
+      { label: "重做", role: "redo", accelerator: "CommandOrControl+Shift+Z" },
+      { type: "separator" },
+      { label: "剪切", role: "cut", accelerator: "CommandOrControl+X" },
+      { label: "复制", role: "copy", accelerator: "CommandOrControl+C" },
+      { label: "粘贴", role: "paste", accelerator: "CommandOrControl+V" },
+      { label: "全选", role: "selectAll", accelerator: "CommandOrControl+A" },
+    ],
+  },
   {
     label: "窗口",
     submenu: [

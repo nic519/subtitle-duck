@@ -1,3 +1,4 @@
+import { createSubtitleGenerationBatch } from "../subtitle-mux/subtitleGenerationBatch";
 import Electrobun, { Electroview } from "electrobun/view";
 import { DESKTOP_RPC_MAX_REQUEST_TIME_MS } from "./rpcRequestPolicy";
 import type {
@@ -62,8 +63,22 @@ const subtitleGenerationTaskSession = createSubtitleGenerationTaskSession({
   },
 });
 
+// 与单视频任务一样保留在桌面客户端，切换页面不会丢失队列和执行状态。
+const subtitleGenerationBatch = createSubtitleGenerationBatch({
+  probeDuration: async (videoPath) => {
+    if (!electrobun) return unavailable("读取视频时长");
+    return (await electrobun.rpc.request.getWhisperVideoDuration({ videoPath })).durationMs;
+  },
+  run: (input) => subtitleGenerationTaskSession.start(input),
+  cancel: () => subtitleGenerationTaskSession.cancel(),
+});
+subtitleGenerationTaskSession.subscribe(task => {
+  if (task.input) subtitleGenerationBatch.reportProgress(task.input.videoPath, task.progressPercent, task.progressMessage);
+});
+
 export const desktopApi = {
   isDesktop: isElectrobun,
+  subtitleGenerationBatch,
   configGet: (key: string) => electrobun?.rpc.request.configGet({ key }) ?? Promise.resolve(browserConfigGet(key)),
   configSet: (key: string, value: string) => electrobun?.rpc.request.configSet({ key, value }) ?? Promise.resolve(browserConfigSet(key, value)),
   openFilePath: (filePath: string) => electrobun?.rpc.request.openFilePath({ filePath }) ?? unavailable("打开本地文件"),

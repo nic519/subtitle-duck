@@ -1,6 +1,6 @@
 import { VideoInfo } from "@/components/video-info/VideoInfo";
 import { useState, type DragEventHandler } from "react";
-import { FileVideo, FolderOpen, Languages, Plus } from "lucide-react";
+import { FileVideo, Languages, Plus } from "lucide-react";
 import { ToolbarButton } from "@/components/page-ui";
 import { resolveLocalFileImport } from "@/local-file-import/localFileImport";
 
@@ -139,10 +139,10 @@ export const SubtitleMergeDropzone = ({
               <Languages className="size-5" />
             </div>
             <div className="mt-3 text-[length:var(--font-size-control)] font-medium text-foreground">
-              把视频和字幕一起拖到这里
+              拖入视频和字幕
             </div>
             <div className="mt-1 text-[length:var(--font-size-caption)] text-muted-foreground">
-              1 个视频 + 1 个 SRT、ASS 或 SSA 字幕
+              字幕格式：SRT / ASS / SSA
             </div>
           </>
         )}
@@ -165,13 +165,6 @@ export const SubtitleMergeDropzone = ({
           darkMode={darkMode}
         />
       </div>
-
-      {!isReady ? (
-        <div className="flex items-center justify-center gap-1.5 text-[length:var(--font-size-caption)] text-muted-foreground">
-          <FolderOpen className="size-3.5" />
-          也可以分别选择文件
-        </div>
-      ) : null}
     </div>
   );
 };

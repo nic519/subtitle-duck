@@ -1,3 +1,5 @@
+import type { SubtitleGenerationBatchSnapshot } from "../../subtitle-mux/subtitleGenerationBatch";
+import { SubtitleGenerationBatchList } from "./SubtitleGenerationBatchList";
 import {
   useState,
   type ReactElement,
@@ -9,6 +11,7 @@ import {
   CircleCheck,
   CircleX,
   Combine,
+  Copy,
   FolderOpen,
   Languages,
   LoaderCircle,
@@ -83,6 +86,9 @@ const isSubtitleGenerationVideoPath = (path: string) => {
 };
 
 export type SubtitleMuxPageContentProps = {
+  generationBatch: SubtitleGenerationBatchSnapshot;
+  onRemoveBatchVideo: (path: string) => void;
+  onRevealBatchSubtitle: (path: string) => void | Promise<void>;
   darkMode: boolean;
   activeTool: SubtitleToolId;
   videoPath: string | null;
@@ -304,11 +310,36 @@ const WorkflowStep = ({
   );
 };
 
-const InstallCommand = ({ children }: { children: string }) => (
-  <code className="block overflow-x-auto rounded-[var(--control-radius-sm)] border border-[var(--result-divider)] bg-[var(--result-surface)] px-2.5 py-2 font-mono text-[11px] leading-5 text-foreground">
-    {children}
-  </code>
-);
+// 命令保持可选中，复制按钮只写入原始命令，并明确反馈失败。
+const InstallCommand = ({ children }: { children: string }) => {
+  const [copyStatus, setCopyStatus] = useState("");
+  return (
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-2 rounded-[var(--control-radius-sm)] border border-[var(--result-divider)] bg-[var(--result-surface)] px-2.5 py-1.5">
+        <code className="min-w-0 flex-1 select-text whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-foreground">
+          {children}
+        </code>
+        <button
+          type="button"
+          aria-label={copyStatus === "已复制" ? "已复制命令" : "复制命令"}
+          title={copyStatus || "复制命令"}
+          className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-[var(--result-row-hover)] hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--control-accent)]"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(children);
+              setCopyStatus("已复制");
+            } catch {
+              setCopyStatus("复制失败，请选中命令后复制");
+            }
+          }}
+        >
+          {copyStatus === "已复制" ? <CircleCheck className="size-3.5" /> : <Copy className="size-3.5" />}
+        </button>
+      </div>
+      <span role="status" className={copyStatus.startsWith("复制失败") ? "text-xs text-[var(--status-error-text)]" : "sr-only"}>{copyStatus}</span>
+    </div>
+  );
+};
 
 export const SubtitleTranscriptionProgress = ({
   percent,
@@ -351,7 +382,7 @@ export const TranscriptionCommands = ({ commands }: { commands: string[] }) => (
       {commands.map((command) => (
         <pre
           key={command}
-          className="custom-scrollbar overflow-x-auto whitespace-pre-wrap break-all rounded-[6px] border border-[var(--result-divider)] bg-background/70 px-2 py-1.5 text-[length:var(--font-size-caption)] text-foreground"
+          className="min-w-0 whitespace-pre-wrap break-all rounded-[6px] border border-[var(--result-divider)] bg-background/70 px-2 py-1.5 text-[length:var(--font-size-caption)] text-foreground"
         >
           <code>{command}</code>
         </pre>
@@ -365,68 +396,55 @@ export const MuxDiagnostics = ({ report }: { report: string | null }) => {
   const [copyStatus, setCopyStatus] = useState("");
   return (
     <details className="subtitle-accent-line border-t pt-3">
-      <summary className="cursor-pointer text-sm text-muted-foreground">查看 FFmpeg 命令与日志</summary>
+      <summary className="cursor-pointer text-sm text-muted-foreground">命令与日志</summary>
       <div className="mt-2 grid gap-2">
-        <p className="text-xs text-muted-foreground">最近一次合并记录（本次打开期间保留）。字幕以可切换轨道封装，请在播放器中启用字幕。</p>
+        <p className="text-xs text-muted-foreground">字幕为可切换轨道，需在播放器中启用。</p>
         {report ? <>
-          <button type="button" className="justify-self-start text-sm underline" onClick={async () => {
+          <button type="button" aria-label="复制命令与日志" title={copyStatus || "复制命令与日志"} className="justify-self-end rounded p-1.5 text-muted-foreground hover:text-foreground focus-visible:outline" onClick={async () => {
             try {
               await navigator.clipboard.writeText(report);
               setCopyStatus("已复制");
             } catch {
               setCopyStatus("复制失败，请在下方手动选择复制");
             }
-          }}>复制命令与日志</button>
-          <span role="status" className="text-xs text-muted-foreground">{copyStatus}</span>
+          }}>{copyStatus === "已复制" ? <CircleCheck className="size-4" /> : <Copy className="size-4" />}</button>
+          <span role="status" className={copyStatus.startsWith("复制失败") ? "text-xs text-destructive" : "sr-only"}>{copyStatus}</span>
           <textarea aria-label="FFmpeg 命令与日志" readOnly value={report} className="h-64 w-full resize-y rounded bg-background p-2 font-mono text-xs" />
-        </> : <p className="text-sm text-muted-foreground">开始合并后，这里会显示实际执行的命令。</p>}
+        </> : <p className="text-sm text-muted-foreground">暂无记录</p>}
       </div>
     </details>
   );
 };
 
+// 引导只补充当前缺少的操作，不重复外层步骤标题或按钮说明。
 const DependencyGuide = ({
   title,
-  description,
   children,
   onRefresh,
   darkMode,
 }: {
-  title: string;
-  description: string;
+  title?: string;
   children: ReactElement | ReactElement[];
   onRefresh?: () => void | Promise<void>;
   darkMode: boolean;
 }) => (
-  <details
-    open
-    data-subtitle-dependency-guide={title}
-    className="border-l-2 border-[var(--subtitle-accent-border)] pl-3"
+  <div
+    data-subtitle-dependency-guide={title ?? "faster-whisper"}
+    className="grid min-w-0 gap-2 border-l-2 border-[var(--subtitle-accent-border)] pl-3 text-[length:var(--font-size-caption)] text-muted-foreground"
   >
-    <summary className="cursor-pointer list-none text-[length:var(--font-size-control)] font-medium text-foreground marker:hidden [&::-webkit-details-marker]:hidden">
-      <span className="inline-flex items-center gap-2">
-        <Terminal className="size-4 text-[var(--subtitle-accent-muted)]" />
-        {title}
-      </span>
-    </summary>
-    <div className="grid gap-3 pb-1 pt-2 text-[length:var(--font-size-caption)] text-muted-foreground">
-      <p>{description}</p>
-      {children}
-      {onRefresh ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <ToolbarButton
-            darkMode={darkMode}
-            onClick={() => void onRefresh()}
-            className="h-7 bg-transparent px-2 text-[length:var(--font-size-caption)] text-muted-foreground hover:bg-[var(--result-row-hover)] hover:text-foreground"
-          >
-            <RefreshCw className="size-3.5" />
-            重新检测
-          </ToolbarButton>
-          <span>安装完成后点击重新检测；若仍未识别，请完全退出后重开字幕鸭。</span>
-        </div>
-      ) : null}
-    </div>
-  </details>
+    {title ? <div className="font-medium text-foreground">{title}</div> : null}
+    {children}
+    {onRefresh ? (
+      <ToolbarButton
+        darkMode={darkMode}
+        onClick={() => void onRefresh()}
+        className="h-7 justify-self-start bg-transparent px-2 text-[length:var(--font-size-caption)] text-muted-foreground hover:bg-[var(--result-row-hover)] hover:text-foreground"
+      >
+        <RefreshCw className="size-3.5" />
+        重新检测
+      </ToolbarButton>
+    ) : null}
+  </div>
 );
 
 const FfmpegInstallGuide = ({
@@ -438,7 +456,6 @@ const FfmpegInstallGuide = ({
 }) => (
   <DependencyGuide
     title="安装 FFmpeg"
-    description="字幕合并和视频预处理需要 FFmpeg。安装后请保持它在系统 PATH 中。"
     onRefresh={onRefresh}
     darkMode={darkMode}
   >
@@ -467,12 +484,6 @@ const FasterWhisperInstallGuide = ({
   packageMissing: boolean;
 }) => (
   <DependencyGuide
-    title={packageMissing ? "安装 faster-whisper" : "配置 Faster Whisper"}
-    description={
-      packageMissing
-        ? "在终端运行下面的命令；安装到当前选择的 Python 环境后，点击重新检测。"
-        : "需要 Python、faster-whisper 包和已下载的 CT2 模型目录。安装后在上方分别选择 Python 与模型目录。"
-    }
     onRefresh={onRefresh}
     darkMode={darkMode}
   >
@@ -481,19 +492,27 @@ const FasterWhisperInstallGuide = ({
         <InstallCommand>{`${pythonPath} -m pip install faster-whisper`}</InstallCommand>
       ) : (
         <>
-          <div>安装 Python 包</div>
-          <InstallCommand>{`${pythonPath} -m pip install --upgrade faster-whisper huggingface_hub`}</InstallCommand>
-          <div>下载模型（示例）</div>
-          <InstallCommand>huggingface-cli download Systran/faster-whisper-large-v3 --local-dir ~/Models/faster-whisper-large-v3</InstallCommand>
+          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+            <div className="grid min-w-0 content-start gap-1">
+              <div>安装 Python 包</div>
+              <InstallCommand>{`${pythonPath} -m pip install --upgrade faster-whisper huggingface_hub`}</InstallCommand>
+            </div>
+            <div className="grid min-w-0 content-start gap-1">
+              <div>下载模型（large-v3）</div>
+              <InstallCommand>huggingface-cli download Systran/faster-whisper-large-v3 --local-dir ~/Models/faster-whisper-large-v3</InstallCommand>
+            </div>
+          </div>
+          <details>
+            <summary className="cursor-pointer py-1">手动下载</summary>
+            <div className="grid gap-2 pt-1">
           <div>
-            也可手动下载：
             <a
               href="https://huggingface.co/Systran/faster-whisper-large-v3/tree/main"
               target="_blank"
               rel="noopener noreferrer"
               className="text-foreground underline underline-offset-4"
             >
-              打开 large-v3 模型下载页
+              large-v3 下载页
             </a>
           </div>
           {/* 本地识别需要完整模型目录，提供配套文件直链，避免只下载权重。 */}
@@ -510,7 +529,9 @@ const FasterWhisperInstallGuide = ({
               </a>
             ))}
           </div>
-          <p>将以上 5 个文件保存到同一个文件夹，保留原文件名。下载完成后，在上方「识别模型」中粘贴该文件夹路径，或点击文件夹图标选择目录，再点击「重新检测」。</p>
+          <p>将 5 个文件原名保存到同一目录，再选为识别模型。</p>
+            </div>
+          </details>
         </>
       )}
     </div>
@@ -523,6 +544,9 @@ export const SubtitleMuxPageContent = ({
   videoPath,
   subtitlePath,
   outputPath,
+  generationBatch,
+  onRemoveBatchVideo,
+  onRevealBatchSubtitle,
   generationVideoPath,
   generationVideoPreview,
   generationDurationMs,
@@ -605,6 +629,7 @@ export const SubtitleMuxPageContent = ({
   onClearTranslation,
   onRevealOutput,
 }: SubtitleMuxPageContentProps) => {
+  const hasGenerationBatch = generationBatch.items.length > 0;
   const previewPlayback = useVideoPreviewPlayback(generationVideoPreview);
   const [generationDropNotice, setGenerationDropNotice] = useState<
     string | null
@@ -654,9 +679,10 @@ export const SubtitleMuxPageContent = ({
   const subtitleTranslationOutputName = getPathTail(
     subtitleTranslationOutputPath,
   );
-  const hasGenerationVideo = Boolean(generationVideoPath);
-  const generationIsComplete =
-    Boolean(generatedSubtitlePath) &&
+  const hasGenerationVideo = Boolean(generationVideoPath) || hasGenerationBatch;
+  const generationIsComplete = hasGenerationBatch
+    ? generationBatch.items.every(item => item.status === "completed")
+    : Boolean(generatedSubtitlePath) &&
     generationStatusTone === "success" &&
     !isGenerating;
   const generationStepStates = getWorkflowStepStates({
@@ -671,6 +697,7 @@ export const SubtitleMuxPageContent = ({
       mergeStatusMessage,
   );
   const canClearGeneration = Boolean(
+    hasGenerationBatch ||
     generationVideoPath ||
       generationVideoPreview ||
       generationDurationMs !== null ||
@@ -970,7 +997,7 @@ export const SubtitleMuxPageContent = ({
               >
                 {isGenerating && transcriptionProgressMessage
                   ? "正在生成字幕"
-                  : "生成字幕"}
+                  : hasGenerationBatch ? "批量生成字幕" : "生成字幕"}
               </ToolbarButton>
             </div>
             <WorkflowStep
@@ -985,11 +1012,6 @@ export const SubtitleMuxPageContent = ({
               <FilePathPicker
                 id="subtitle-generate-video"
                 compact
-                accessory={generationVideoPath ? (
-                  <div className="sm:max-w-[340px]">
-                    <VideoInfo videoPath={generationVideoPath} />
-                  </div>
-                ) : null}
                 darkMode={darkMode}
                 label="视频"
                 icon={<Video className="size-4 shrink-0" />}
@@ -997,7 +1019,7 @@ export const SubtitleMuxPageContent = ({
                 selectedPathDataAttribute={{
                   "data-subtitle-generate-selected-path": "video",
                 }}
-                placeholder="拖入视频或粘贴本地路径"
+                placeholder="拖入一个或多个视频，或粘贴本地路径"
                 dropTitle="拖入视频文件"
                 chooseLabel="选择视频"
                 showHeader={false}
@@ -1005,14 +1027,19 @@ export const SubtitleMuxPageContent = ({
                 onChoose={onChooseGenerationVideo}
                 onUsePath={onUseGenerationVideoPath}
                 onDropPaths={(paths) => {
-                  const videoPath = paths.find(isSubtitleGenerationVideoPath);
-                  if (!videoPath) {
+                  const videoPaths = paths.filter(isSubtitleGenerationVideoPath);
+                  if (videoPaths.length === 0) {
                     setGenerationDropNotice("仅支持拖入视频文件");
                     return;
                   }
-                  onDropGenerationVideoPaths([videoPath]);
+                  onDropGenerationVideoPaths(videoPaths);
                 }}
               />
+              <div className="mt-3">
+                {hasGenerationBatch ? (
+                  <SubtitleGenerationBatchList batch={generationBatch} darkMode={darkMode} onRemove={onRemoveBatchVideo} onReveal={onRevealBatchSubtitle} />
+                ) : <VideoInfo videoPath={generationVideoPath} />}
+              </div>
               </div>
             </WorkflowStep>
 
@@ -1047,7 +1074,7 @@ export const SubtitleMuxPageContent = ({
                 </span>
               }
               state={generationStepStates.settings}
-              isLast={false}
+              isLast={hasGenerationBatch}
             >
               <div
                 data-subtitle-generate-whisper-card="compact"
@@ -1063,7 +1090,7 @@ export const SubtitleMuxPageContent = ({
                           {fasterWhisperStatus.error}
                         </div>
                       ) : null}
-                      <div className="grid min-w-0 gap-1.5 text-[length:var(--font-size-caption)]">
+                      <div className="grid min-w-0 gap-x-4 gap-y-2 lg:grid-cols-2 text-[length:var(--font-size-caption)]">
                         <div className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2">
                           <span className="whitespace-nowrap text-muted-foreground">
                             运行环境
@@ -1168,7 +1195,7 @@ export const SubtitleMuxPageContent = ({
 
             </WorkflowStep>
 
-            <WorkflowStep
+            {!hasGenerationBatch ? <WorkflowStep
               workflow="generation"
               id="progress"
               number="03"
@@ -1198,7 +1225,7 @@ export const SubtitleMuxPageContent = ({
                 <div className="rounded-[8px] bg-[var(--result-surface)] px-3 py-4 text-[length:var(--font-size-caption)] text-muted-foreground">
                   {previewPlayback.error
                     ? `实时兼容预览失败：${previewPlayback.error}`
-                    : "当前格式无法直接预览，正在建立实时兼容预览；也可以继续手动输入开始和结束时间。"}
+                    : "正在建立兼容预览…"}
                 </div>
               ) : null}
 
@@ -1266,7 +1293,9 @@ export const SubtitleMuxPageContent = ({
               </StatusMessage>
             </div>
           ) : null}
-            </WorkflowStep>
+            </WorkflowStep> : generationStatusTone === "error" && generationStatusMessage ? (
+              <StatusMessage tone="error">{generationStatusMessage}</StatusMessage>
+            ) : null}
           </div>
         </section>
 
@@ -1328,7 +1357,7 @@ export const SubtitleMuxPageContent = ({
             >
               <div
                 data-subtitle-translation-file-content="true"
-                className="grid min-w-0 gap-2 [&_[data-subtitle-translate-selected-path]]:hidden"
+                className="grid min-w-0 gap-2"
               >
                 {subtitleTranslationPath ? (
                   <div className="min-w-0">
@@ -1352,6 +1381,8 @@ export const SubtitleMuxPageContent = ({
                 ) : null}
                 <FilePathPicker
                   id="subtitle-translate-file"
+                  showHeader={false}
+                  compact
                   darkMode={darkMode}
                   label="SRT 字幕"
                   icon={<Languages className="size-4 shrink-0" />}
@@ -1359,7 +1390,7 @@ export const SubtitleMuxPageContent = ({
                   selectedPathDataAttribute={{
                     "data-subtitle-translate-selected-path": "subtitle",
                   }}
-                  placeholder="粘贴本地 .srt 字幕路径"
+                  placeholder="拖入 SRT 文件，或粘贴路径"
                   dropTitle="拖入 .srt 字幕文件"
                   chooseLabel={
                     subtitleTranslationPath ? "更换字幕" : "选择字幕"
@@ -1533,7 +1564,7 @@ export const SubtitleMuxPageContent = ({
               <div className="rounded-2xl bg-white/[0.035] px-4 py-3.5 shadow-[inset_2px_0_0_var(--subtitle-accent-border)]">
                 <div className="flex items-center gap-2">
                   <span role="status" className={subtitleTranslationConnectionStatus === "unavailable" ? "text-destructive" : "text-muted-foreground"}>
-                    {subtitleTranslationConnectionStatus === "idle" ? "尚未测试连接" : subtitleTranslationConnectionStatus === "testing" ? "正在测试翻译服务…" : subtitleTranslationConnectionStatus === "available" ? "翻译服务连接正常" : "翻译服务连接测试失败"}
+                    {subtitleTranslationConnectionStatus === "idle" ? "未测试" : subtitleTranslationConnectionStatus === "testing" ? "连接中…" : subtitleTranslationConnectionStatus === "available" ? "连接正常" : "连接失败"}
                   </span>
                 </div>
                 {subtitleTranslationConnectionStatus === "unavailable" && subtitleTranslationConnectionError ? <p className="mt-2 break-words text-destructive">{subtitleTranslationConnectionError}</p> : null}
@@ -1556,7 +1587,7 @@ export const SubtitleMuxPageContent = ({
                       className="h-8 min-w-0 max-w-md flex-1 border-b border-white/15 bg-transparent px-1 text-[length:var(--font-size-control)] text-foreground outline-none transition-colors placeholder:text-[var(--form-field-placeholder)] focus:border-[var(--control-accent)] focus:ring-0"
                     />
                   </label>
-                  <span className="pb-1 text-muted-foreground/80">{subtitleTranslationProxyEnabled ? (subtitleTranslationProxyUrl.trim() ? "使用指定代理连接" : "请填写代理地址") : "代理已关闭"}</span>
+                  {subtitleTranslationProxyEnabled && !subtitleTranslationProxyUrl.trim() ? <span className="pb-1 text-muted-foreground/80">请填写代理地址</span> : null}
                 </div>
                 <div className="mt-3 flex justify-end">
                   <button
