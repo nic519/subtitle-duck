@@ -418,6 +418,38 @@ body {
   border-color: var(--subtitle-accent-border);
 }
 
+/* 两类诊断共用折叠标题，整行可操作并保留键盘焦点提示。 */
+.subtitle-diagnostics-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 4px;
+  border-radius: 6px;
+  list-style: none;
+  cursor: pointer;
+  color: var(--muted-foreground);
+  font-size: var(--font-size-caption);
+}
+
+.subtitle-diagnostics-summary::-webkit-details-marker {
+  display: none;
+}
+
+.subtitle-diagnostics-summary:hover {
+  background: var(--detail-secondary-action-hover-bg);
+  color: var(--app-text);
+}
+
+.subtitle-diagnostics-summary:focus-visible {
+  outline: 2px solid var(--control-accent);
+  outline-offset: 2px;
+}
+
+.subtitle-diagnostics[open] > summary .subtitle-diagnostics-chevron {
+  transform: rotate(90deg);
+}
+
 .subtitle-accent-progress {
   background: var(--subtitle-accent-gradient);
   box-shadow: 0 0 18px var(--subtitle-accent-shadow);

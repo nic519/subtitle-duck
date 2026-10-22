@@ -9,6 +9,7 @@ import {
 import {
   AlertCircle,
   Captions,
+  ChevronRight,
   CircleCheck,
   CircleX,
   Combine,
@@ -371,19 +372,20 @@ export const SubtitleTranscriptionProgress = ({
 export const TranscriptionCommands = ({ commands }: { commands: string[] }) => (
   <details
     data-subtitle-tool-transcription-commands
-    className="subtitle-accent-line border-t pt-3"
+    className="subtitle-diagnostics min-w-0 border-t border-[var(--result-divider)]"
   >
-    <summary className="cursor-pointer list-none text-[length:var(--font-size-caption)] text-muted-foreground marker:hidden [&::-webkit-details-marker]:hidden">
+    <summary className="subtitle-diagnostics-summary">
       <span className="inline-flex items-center gap-1.5">
         <Terminal className="size-3.5" aria-hidden="true" />
         执行命令
       </span>
+      <ChevronRight className="subtitle-diagnostics-chevron size-3.5 shrink-0" aria-hidden="true" />
     </summary>
     <div className="mt-2 grid gap-1.5">
       {commands.map((command) => (
         <pre
           key={command}
-          className="min-w-0 whitespace-pre-wrap break-all rounded-[6px] border border-[var(--result-divider)] bg-background/70 px-2 py-1.5 text-[length:var(--font-size-caption)] text-foreground"
+          className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[6px] border border-[var(--result-divider)] bg-background/70 px-2 py-1.5 text-[length:var(--font-size-caption)] text-foreground"
         >
           <code>{command}</code>
         </pre>
@@ -396,27 +398,34 @@ export const TranscriptionCommands = ({ commands }: { commands: string[] }) => (
 export const MuxDiagnostics = ({ report }: { report: string | null }) => {
   const [copyStatus, setCopyStatus] = useState("");
   return (
-    <details className="subtitle-accent-line border-t pt-3">
-      <summary className="cursor-pointer text-[length:var(--font-size-caption)] text-muted-foreground">
+    <details className="subtitle-diagnostics min-w-0 border-t border-[var(--result-divider)]">
+      <summary className="subtitle-diagnostics-summary">
         <span className="inline-flex items-center gap-1.5">
           <Terminal className="size-3.5" aria-hidden="true" />
           命令与日志
         </span>
+        <ChevronRight className="subtitle-diagnostics-chevron size-3.5 shrink-0" aria-hidden="true" />
       </summary>
-      <div className="mt-2 grid gap-2">
-        <p className="text-xs text-muted-foreground">字幕为可切换轨道，需在播放器中启用。</p>
+      <div className="grid min-w-0 gap-3 pb-3 pt-1">
         {report ? <>
-          <button type="button" aria-label="复制命令与日志" title={copyStatus || "复制命令与日志"} className="justify-self-end rounded p-1.5 text-muted-foreground hover:text-foreground focus-visible:outline" onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(report);
-              setCopyStatus("已复制");
-            } catch {
-              setCopyStatus("复制失败，请在下方手动选择复制");
-            }
-          }}>{copyStatus === "已复制" ? <CircleCheck className="size-4" /> : <Copy className="size-4" />}</button>
+          {/* 复制操作固定在右上角，正文预留空间；保留原始日志用于完整复制。 */}
+          <div className="relative min-w-0 overflow-hidden rounded-lg bg-background/70">
+            <button type="button" aria-label="复制命令与日志" title={copyStatus || "复制命令与日志"} className="absolute right-2 top-2 rounded-md bg-background p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(report);
+                setCopyStatus("已复制");
+              } catch {
+                setCopyStatus("复制失败，请在下方手动选择复制");
+              }
+            }}>{copyStatus === "已复制" ? <CircleCheck className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}</button>
+            <pre tabIndex={0} aria-label="FFmpeg 命令与日志" className="max-h-64 min-w-0 overflow-y-auto whitespace-pre-wrap p-3 pr-12 font-mono text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px]">{report}</pre>
+          </div>
           <span role="status" className={copyStatus.startsWith("复制失败") ? "text-xs text-destructive" : "sr-only"}>{copyStatus}</span>
-          <textarea aria-label="FFmpeg 命令与日志" readOnly value={report} className="h-64 w-full resize-y rounded bg-background p-2 font-mono text-xs" />
-        </> : <p className="text-sm text-muted-foreground">暂无记录</p>}
+        </> : <p className="rounded-lg bg-background/50 px-3 py-3 text-xs leading-relaxed text-muted-foreground">暂无运行记录，合并后将在此显示命令与日志。</p>}
+        <p className="flex items-start gap-2 px-1 text-xs leading-relaxed text-muted-foreground">
+          <Captions className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <span>字幕为可切换轨道，需在播放器中启用。</span>
+        </p>
       </div>
     </details>
   );
