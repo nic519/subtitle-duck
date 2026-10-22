@@ -158,9 +158,11 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
         activeTranscriptions.get(videoPath)?.abort();
         activeTranscriptions.set(videoPath, controller);
         try {
+          const outputPath = getAvailableWhisperOutputPathForRanges(videoPath, existsSync, ranges, durationMs);
           return await transcribeVideoSubtitleRanges({
             videoPath,
-            outputPath: getAvailableWhisperOutputPathForRanges(videoPath, existsSync, ranges, durationMs),
+            outputPath,
+            replaceExistingSubtitle: existsSync(outputPath),
             modelPath: faster.modelPath,
             language,
             ranges,

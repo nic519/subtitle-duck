@@ -1234,6 +1234,19 @@ export const SubtitleMuxPageContent = ({
               isLast
             >
             <div className="grid gap-2.5">
+              {/* 常驻展示局部更新能力及同名文件约束，操作前即可了解替换范围。 */}
+              <div className="mb-1 flex items-start gap-2.5 border-l-2 border-[var(--subtitle-accent-border)] py-1 pl-3">
+                <Captions className="mt-0.5 size-4 shrink-0 text-[var(--subtitle-accent-muted)]" aria-hidden="true" />
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-medium text-foreground">局部重识别，字幕精准更新</p>
+                  <p className="text-[length:var(--font-size-caption)] leading-relaxed text-muted-foreground">
+                    用「设为开始 / 结束」选定片段，只更新选中时间段的字幕，其余内容保留，无需重新识别整段视频。
+                  </p>
+                  <p className="text-[length:var(--font-size-caption)] leading-relaxed text-muted-foreground">
+                    局部识别会更新视频同目录、同名的 SRT；没有同名字幕时新建。失败或未完成的片段保留原文，全文识别另存文件。
+                  </p>
+                </div>
+              </div>
 
             <div className="grid gap-2.5">
               {generationVideoPreview && !previewPlayback.isUnavailable ? (
