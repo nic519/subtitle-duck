@@ -106,6 +106,8 @@ export const SubtitleMuxPage = ({
   const [generationRangeError, setGenerationRangeError] = useState<
     string | null
   >(null);
+  // 保留最近一次实际执行记录，切换文件后仍可回查；下一次执行时重置。
+  const [muxDiagnostics, setMuxDiagnostics] = useState<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [transcriptionProgressMessage, setTranscriptionProgressMessage] =
     useState<string | null>(null);
@@ -135,6 +137,8 @@ export const SubtitleMuxPage = ({
   >(null);
   if (!subtitleTranslationSessionRef.current) {
     subtitleTranslationSessionRef.current = createSubtitleTranslationSession({
+      loadProxyEnabled: async () => (await desktopApi.configGet("subtitle_translation_proxy_enabled")) === "true",
+      saveProxyEnabled: (value) => desktopApi.configSet("subtitle_translation_proxy_enabled", String(value)),
       loadProxyUrl: () => desktopApi.configGet("subtitle_translation_proxy_url"),
       saveProxyUrl: (value) =>
         desktopApi.configSet("subtitle_translation_proxy_url", value),
@@ -298,14 +302,11 @@ export const SubtitleMuxPage = ({
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    if (activeTool !== "translate") return;
-    void subtitleTranslationSessionRef.current!.testConnection().catch(() => undefined);
-  }, [activeTool]);
 
   useEffect(() => {
     return desktopApi.onSubtitleMuxProgress((progress) => {
       setProgressMessage(progress.message);
+      if (progress.diagnostics) setMuxDiagnostics(progress.diagnostics);
     });
   }, []);
 
@@ -759,6 +760,7 @@ export const SubtitleMuxPage = ({
       return;
     }
 
+    setMuxDiagnostics(null);
     setIsMerging(true);
     setProgressMessage("准备调用 ffmpeg");
     setMergeStatus({ tone: "neutral", message: "正在合并字幕" });
@@ -855,6 +857,8 @@ export const SubtitleMuxPage = ({
         subtitleTranslationTargetLanguage={subtitleTranslationTargetLanguage}
         subtitleTranslationOutputPath={subtitleTranslationOutputPath}
         subtitleTranslationBatchCharacters={subtitleTranslationBatchCharacters}
+        subtitleTranslationProxyEnabled={subtitleTranslation.proxyEnabled}
+        onChangeSubtitleTranslationProxyEnabled={(value) => subtitleTranslationSessionRef.current!.changeProxyEnabled(value)}
         subtitleTranslationProxyUrl={subtitleTranslationProxyUrl}
         subtitleTranslationConnectionStatus={subtitleTranslationConnectionStatus}
         subtitleTranslationConnectionError={subtitleTranslationConnectionError}
@@ -880,6 +884,7 @@ export const SubtitleMuxPage = ({
         progressMessage={progressMessage}
         transcriptionProgressMessage={transcriptionProgressMessage}
         transcriptionProgressPercent={transcriptionProgressPercent}
+        muxDiagnostics={muxDiagnostics}
         transcriptionCommandLines={transcriptionCommandLines}
         mergeStatusTone={mergeStatus.tone}
         mergeStatusMessage={mergeStatus.message}

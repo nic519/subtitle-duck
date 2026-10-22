@@ -9,6 +9,8 @@ import {
 export type { SubtitleTranslationProgress };
 
 export interface TranslateSubtitleFileInput {
+  /** 本次请求使用的代理；空字符串表示不使用应用代理。 */
+  proxyUrl?: string;
   subtitlePath: string;
   targetLanguage?: string | null;
   sourceLanguage?: string | null;

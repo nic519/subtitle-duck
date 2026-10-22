@@ -13,6 +13,7 @@ coverage/
 # Electrobun and Vite caches
 .electrobun/
 .hutch/
+.cottontail-tmp/
 .vite/
 
 # Native bridge build artifacts

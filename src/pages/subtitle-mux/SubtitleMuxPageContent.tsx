@@ -108,6 +108,7 @@ export type SubtitleMuxPageContentProps = {
   progressMessage: string | null;
   transcriptionProgressMessage: string | null;
   transcriptionProgressPercent: number | null;
+  muxDiagnostics: string | null;
   transcriptionCommandLines: string[];
   mergeStatusTone: "neutral" | "success" | "error";
   mergeStatusMessage: string | null;
@@ -117,6 +118,8 @@ export type SubtitleMuxPageContentProps = {
   subtitleTranslationTargetLanguage: string;
   subtitleTranslationOutputPath: string | null;
   subtitleTranslationBatchCharacters: number;
+  subtitleTranslationProxyEnabled: boolean;
+  onChangeSubtitleTranslationProxyEnabled: (value: boolean) => void;
   subtitleTranslationProxyUrl: string;
   subtitleTranslationConnectionStatus: "idle" | "testing" | "available" | "unavailable";
   subtitleTranslationConnectionError: string | null;
@@ -356,6 +359,31 @@ export const TranscriptionCommands = ({ commands }: { commands: string[] }) => (
   </details>
 );
 
+// 使用最近一次后端记录，默认收起，避免日志挤占合并界面。
+export const MuxDiagnostics = ({ report }: { report: string | null }) => {
+  const [copyStatus, setCopyStatus] = useState("");
+  return (
+    <details className="subtitle-accent-line border-t pt-3">
+      <summary className="cursor-pointer text-sm text-muted-foreground">查看 FFmpeg 命令与日志</summary>
+      <div className="mt-2 grid gap-2">
+        <p className="text-xs text-muted-foreground">最近一次合并记录（本次打开期间保留）。字幕以可切换轨道封装，请在播放器中启用字幕。</p>
+        {report ? <>
+          <button type="button" className="justify-self-start text-sm underline" onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(report);
+              setCopyStatus("已复制");
+            } catch {
+              setCopyStatus("复制失败，请在下方手动选择复制");
+            }
+          }}>复制命令与日志</button>
+          <span role="status" className="text-xs text-muted-foreground">{copyStatus}</span>
+          <textarea aria-label="FFmpeg 命令与日志" readOnly value={report} className="h-64 w-full resize-y rounded bg-background p-2 font-mono text-xs" />
+        </> : <p className="text-sm text-muted-foreground">开始合并后，这里会显示实际执行的命令。</p>}
+      </div>
+    </details>
+  );
+};
+
 const DependencyGuide = ({
   title,
   description,
@@ -515,6 +543,7 @@ export const SubtitleMuxPageContent = ({
   progressMessage,
   transcriptionProgressMessage,
   transcriptionProgressPercent,
+  muxDiagnostics,
   transcriptionCommandLines,
   mergeStatusTone,
   mergeStatusMessage,
@@ -524,6 +553,8 @@ export const SubtitleMuxPageContent = ({
   subtitleTranslationTargetLanguage,
   subtitleTranslationOutputPath,
   subtitleTranslationBatchCharacters,
+  subtitleTranslationProxyEnabled,
+  onChangeSubtitleTranslationProxyEnabled,
   subtitleTranslationProxyUrl,
   subtitleTranslationConnectionStatus,
   subtitleTranslationConnectionError,
@@ -832,6 +863,7 @@ export const SubtitleMuxPageContent = ({
                 {isMerging ? "正在合并字幕" : "开始合并"}
               </ToolbarButton>
             </div>
+            <MuxDiagnostics report={muxDiagnostics} />
             <SubtitleMergeDropzone
               darkMode={darkMode}
               videoPath={videoPath}
@@ -1274,7 +1306,7 @@ export const SubtitleMuxPageContent = ({
                   darkMode={darkMode}
                   onClick={() => void onTranslateSubtitle()}
                   className="subtitle-accent-action shrink-0"
-                  disabled={!subtitleTranslationPath || isTranslatingSubtitle}
+                  disabled={!subtitleTranslationPath || isTranslatingSubtitle || (subtitleTranslationProxyEnabled && !subtitleTranslationProxyUrl.trim())}
                 >
                   {isTranslatingSubtitle ? "正在翻译字幕" : "开始翻译"}
                 </ToolbarButton>
@@ -1489,14 +1521,19 @@ export const SubtitleMuxPageContent = ({
               </div>
             </WorkflowStep>
           </div>
-          {subtitleTranslationConnectionStatus === "unavailable" ? (
+          {(
             <div className="mx-auto mt-7 w-full max-w-[900px] px-1 text-[length:var(--font-size-caption)]">
               <div className="rounded-2xl bg-white/[0.035] px-4 py-3.5 shadow-[inset_2px_0_0_var(--subtitle-accent-border)]">
                 <div className="flex items-center gap-2">
-                <CircleX className="size-3.5 text-destructive" />
-                  <span className="text-destructive">连接需要代理或重试</span>
-                  {subtitleTranslationConnectionError ? <span className="sr-only">{subtitleTranslationConnectionError}</span> : null}
+                  <span role="status" className={subtitleTranslationConnectionStatus === "unavailable" ? "text-destructive" : "text-muted-foreground"}>
+                    {subtitleTranslationConnectionStatus === "idle" ? "尚未测试连接" : subtitleTranslationConnectionStatus === "testing" ? "正在测试翻译服务…" : subtitleTranslationConnectionStatus === "available" ? "翻译服务连接正常" : "翻译服务连接测试失败"}
+                  </span>
                 </div>
+                {subtitleTranslationConnectionStatus === "unavailable" && subtitleTranslationConnectionError ? <p className="mt-2 break-words text-destructive">{subtitleTranslationConnectionError}</p> : null}
+                <label className="mt-3 flex items-center gap-2 text-muted-foreground">
+                  <input type="checkbox" role="switch" checked={subtitleTranslationProxyEnabled} disabled={isTranslatingSubtitle} onChange={(event) => onChangeSubtitleTranslationProxyEnabled(event.target.checked)} className="accent-[var(--control-accent)]" />
+                  使用代理
+                </label>
                 <div className="mt-3 grid items-end gap-x-5 gap-y-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <label className="flex min-w-0 items-center gap-3 text-muted-foreground">
                     <span className="shrink-0">代理地址</span>
@@ -1507,27 +1544,27 @@ export const SubtitleMuxPageContent = ({
                       autoComplete="off"
                       value={subtitleTranslationProxyUrl}
                       placeholder="http://127.0.0.1:7890"
-                      disabled={isTranslatingSubtitle}
+                      disabled={isTranslatingSubtitle || !subtitleTranslationProxyEnabled}
                       onChange={(event) => onChangeSubtitleTranslationProxyUrl(event.target.value)}
                       className="h-8 min-w-0 max-w-md flex-1 border-b border-white/15 bg-transparent px-1 text-[length:var(--font-size-control)] text-foreground outline-none transition-colors placeholder:text-[var(--form-field-placeholder)] focus:border-[var(--control-accent)] focus:ring-0"
                     />
                   </label>
-                  <span className="pb-1 text-muted-foreground/80">留空时使用直接连接</span>
+                  <span className="pb-1 text-muted-foreground/80">{subtitleTranslationProxyEnabled ? (subtitleTranslationProxyUrl.trim() ? "使用指定代理连接" : "请填写代理地址") : "代理已关闭"}</span>
                 </div>
                 <div className="mt-3 flex justify-end">
                   <button
                     type="button"
                     onClick={() => void onTestSubtitleTranslationConnection()}
-                    disabled={isTranslatingSubtitle}
+                    disabled={isTranslatingSubtitle || subtitleTranslationConnectionStatus === "testing" || (subtitleTranslationProxyEnabled && !subtitleTranslationProxyUrl.trim())}
                     className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
                   >
                     <RefreshCw className="size-3.5" />
-                    重新测试
+                    测试连接
                   </button>
                 </div>
               </div>
             </div>
-          ) : null}
+          )}
         </section>
 
       </FixedRailLayout>

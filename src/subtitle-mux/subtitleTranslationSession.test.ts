@@ -4,6 +4,8 @@ import { createSubtitleTranslationSession } from "./subtitleTranslationSession";
 describe("subtitle translation session", () => {
   test("completes a translation and invalidates the result when settings change", async () => {
     const session = createSubtitleTranslationSession({
+      loadProxyEnabled: async () => false,
+      saveProxyEnabled: async () => undefined,
       loadProxyUrl: async () => "",
       saveProxyUrl: async () => undefined,
       testConnection: async () => ({ available: true, error: null }),
@@ -40,6 +42,8 @@ describe("subtitle translation session", () => {
   test("retries through the same session after a translation failure", async () => {
     let attempts = 0;
     const session = createSubtitleTranslationSession({
+      loadProxyEnabled: async () => false,
+      saveProxyEnabled: async () => undefined,
       loadProxyUrl: async () => "",
       saveProxyUrl: async () => undefined,
       testConnection: async () => ({ available: true, error: null }),
@@ -68,6 +72,8 @@ describe("subtitle translation session", () => {
   test("publishes a neutral stopped result when cancellation aborts translation", async () => {
     let rejectTranslation: ((reason: unknown) => void) | null = null;
     const session = createSubtitleTranslationSession({
+      loadProxyEnabled: async () => false,
+      saveProxyEnabled: async () => undefined,
       loadProxyUrl: async () => "",
       saveProxyUrl: async () => undefined,
       testConnection: async () => ({ available: true, error: null }),
@@ -96,6 +102,8 @@ describe("subtitle translation session", () => {
       | null = null;
     let rejectCancel: ((reason: unknown) => void) | null = null;
     const session = createSubtitleTranslationSession({
+      loadProxyEnabled: async () => false,
+      saveProxyEnabled: async () => undefined,
       loadProxyUrl: async () => "",
       saveProxyUrl: async () => undefined,
       testConnection: async () => ({ available: true, error: null }),
@@ -125,6 +133,8 @@ describe("subtitle translation session", () => {
       | ((result: { available: boolean; error: string | null }) => void)
       | null = null;
     const session = createSubtitleTranslationSession({
+      loadProxyEnabled: async () => false,
+      saveProxyEnabled: async () => undefined,
       loadProxyUrl: async () => "",
       saveProxyUrl: async () => undefined,
       testConnection: async () => new Promise((resolve) => {
@@ -146,6 +156,8 @@ describe("subtitle translation session", () => {
 
   test("sanitizes translation settings through the session interface", () => {
     const session = createSubtitleTranslationSession({
+      loadProxyEnabled: async () => false,
+      saveProxyEnabled: async () => undefined,
       loadProxyUrl: async () => "",
       saveProxyUrl: async () => undefined,
       testConnection: async () => ({ available: true, error: null }),
@@ -165,4 +177,31 @@ describe("subtitle translation session", () => {
     session.changeBatchCharacters(Number.NaN);
     expect(session.getSnapshot().batchCharacters).toBe(1_500);
   });
+});
+
+// 关闭代理必须保留地址，并让检测与翻译一致使用直连。
+test("proxy switch controls both requests without losing the address", async () => {
+  const requests: string[] = [];
+  const session = createSubtitleTranslationSession({
+    loadProxyUrl: async () => "http://127.0.0.1:7890",
+    loadProxyEnabled: async () => false,
+    saveProxyUrl: async () => undefined,
+    saveProxyEnabled: async () => undefined,
+    testConnection: async (url) => { requests.push(url); return { available: true, error: null }; },
+    translate: async (input) => { requests.push(input.proxyUrl); return { outputPath: "out.srt", cueCount: 1 }; },
+    cancel: async () => undefined,
+  });
+  await session.initialize();
+  expect(session.getSnapshot().connection.status).toBe("idle");
+  session.selectFile("in.srt");
+  await session.testConnection();
+  await session.start();
+  session.changeProxyEnabled(true);
+  expect(session.getSnapshot().connection.status).toBe("idle");
+  await session.testConnection();
+  await session.start();
+  session.changeProxyEnabled(false);
+  expect(session.getSnapshot().proxyUrl).toBe("http://127.0.0.1:7890");
+  await session.testConnection();
+  expect(requests).toEqual(["", "", "http://127.0.0.1:7890", "http://127.0.0.1:7890", ""]);
 });

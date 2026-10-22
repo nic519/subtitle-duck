@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { ApplicationMenu, BrowserView, BrowserWindow, Utils } from "electrobun/bun";
+import Electrobun, { ApplicationMenu, BrowserView, BrowserWindow, Utils } from "electrobun/bun";
 import { configGet, configSet } from "./configStore";
 import {
   chooseFasterWhisperModelDirectory,
@@ -8,6 +8,7 @@ import {
   chooseSubtitleMuxFile,
 } from "./fileDialog";
 import { openFilePath, revealFilePath } from "./fileService";
+import { openExternalLink } from "./externalLinks";
 import { requestRaw } from "./httpRequest";
 import { createLocalMediaPreviewServer } from "./localMediaPreview";
 import { createLocalFileDropBroker } from "./file-drop/localFileDropBroker";
@@ -162,7 +163,7 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
         const controller = new AbortController();
         activeSubtitleTranslations.get(input.subtitlePath)?.abort();
         activeSubtitleTranslations.set(input.subtitlePath, controller);
-        const proxyUrl = (await configGet("subtitle_translation_proxy_url"))?.trim();
+        const proxyUrl = input.proxyUrl?.trim();
         const translateText = createGoogleTranslateTextService(requestRaw, {
           proxyConfig: proxyUrl ? { enabled: true, url: proxyUrl } : undefined,
         });
@@ -180,7 +181,8 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
       },
       cancelTranslateSubtitleFile: ({ subtitlePath }) => activeSubtitleTranslations.get(subtitlePath)?.abort(),
       testSubtitleTranslationConnection: async ({ proxyUrl }) => {
-        const configuredProxyUrl = proxyUrl?.trim() || (await configGet("subtitle_translation_proxy_url"))?.trim();
+        // 空字符串明确表示关闭代理，不能回退到已保存的地址。
+        const configuredProxyUrl = proxyUrl?.trim();
         try {
           const translateText = createGoogleTranslateTextService(requestRaw, {
             proxyConfig: configuredProxyUrl ? { enabled: true, url: configuredProxyUrl } : undefined,
@@ -203,6 +205,11 @@ mainWindow = new BrowserWindow({
   titleBarStyle: "hiddenInset",
   renderer: "native",
   rpc,
+});
+// target="_blank" 在桌面 WebView 中只发出事件，需要显式交给系统浏览器。
+// SDK 的 BrowserView.on 类型尚未包含此事件，使用同一事件总线的窗口专属事件。
+Electrobun.events.on(`new-window-open-${mainWindow.webview.id}`, (event: { data: { detail: unknown } }) => {
+  openExternalLink(event.data.detail, Utils.openExternal);
 });
 if (Bun.env.SUBTITLE_DUCK_VERIFY_LOCAL_APP === "1") {
   console.log("[subtitle-duck] BrowserWindow created");

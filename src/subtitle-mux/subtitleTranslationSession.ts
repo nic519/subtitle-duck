@@ -7,6 +7,8 @@ type TranslationProgress = {
 };
 
 type SubtitleTranslationSessionAdapter = {
+  loadProxyEnabled: () => Promise<boolean>;
+  saveProxyEnabled: (value: boolean) => Promise<unknown>;
   loadProxyUrl: () => Promise<string | null>;
   saveProxyUrl: (value: string) => Promise<unknown>;
   testConnection: (
@@ -18,6 +20,7 @@ type SubtitleTranslationSessionAdapter = {
       targetLanguage: string;
       sourceLanguage: string;
       maxBatchCharacters: number;
+      proxyUrl: string;
     },
     onProgress: (progress: TranslationProgress) => void,
   ) => Promise<{ outputPath: string; cueCount: number }>;
@@ -30,6 +33,7 @@ export type SubtitleTranslationSessionSnapshot = {
   targetLanguage: string;
   batchCharacters: number;
   proxyUrl: string;
+  proxyEnabled: boolean;
   connection: {
     status: "idle" | "testing" | "available" | "unavailable";
     error: string | null;
@@ -49,6 +53,7 @@ const initialSnapshot = (): SubtitleTranslationSessionSnapshot => ({
   targetLanguage: "zh-CN",
   batchCharacters: 1500,
   proxyUrl: "",
+  proxyEnabled: false,
   connection: { status: "idle", error: null },
   translatedPath: null,
   expectedOutputPath: null,
@@ -111,7 +116,8 @@ export const createSubtitleTranslationSession = (
     },
     async initialize() {
       const proxyUrl = (await adapter.loadProxyUrl())?.trim() || "";
-      publish({ ...snapshot, proxyUrl });
+      const proxyEnabled = await adapter.loadProxyEnabled();
+      publish({ ...snapshot, proxyUrl, proxyEnabled });
     },
     selectFile(path: string) {
       const normalizedPath = path.trim();
@@ -148,6 +154,14 @@ export const createSubtitleTranslationSession = (
           : 1500,
       });
     },
+    // 切换连接方式后，旧检测结果不再适用于当前设置。
+    changeProxyEnabled(value: boolean) {
+      connectionIdentity = null;
+      publish({ ...snapshot, proxyEnabled: value, connection: { status: "idle", error: null } });
+      void adapter.saveProxyEnabled(value).catch((error) => {
+        publish({ ...snapshot, presentation: { tone: "error", message: String(error) } });
+      });
+    },
     changeProxyUrl(value: string) {
       connectionIdentity = null;
       publish({
@@ -173,7 +187,7 @@ export const createSubtitleTranslationSession = (
         connection: { status: "testing", error: null },
       });
       try {
-        const result = await adapter.testConnection(snapshot.proxyUrl);
+        const result = await adapter.testConnection(snapshot.proxyEnabled ? snapshot.proxyUrl.trim() : "");
         if (connectionIdentity !== identity) return result;
         publish({
           ...snapshot,
@@ -208,6 +222,8 @@ export const createSubtitleTranslationSession = (
         targetLanguage: snapshot.targetLanguage,
         sourceLanguage: "auto",
         maxBatchCharacters: snapshot.batchCharacters,
+        // 显式传递本次连接方式，避免异步保存设置导致请求使用旧代理。
+        proxyUrl: snapshot.proxyEnabled ? snapshot.proxyUrl.trim() : "",
       };
       publish({
         ...snapshot,
@@ -312,6 +328,7 @@ export const createSubtitleTranslationSession = (
         targetLanguage: snapshot.targetLanguage,
         batchCharacters: snapshot.batchCharacters,
         proxyUrl: snapshot.proxyUrl,
+        proxyEnabled: snapshot.proxyEnabled,
       });
     },
   };

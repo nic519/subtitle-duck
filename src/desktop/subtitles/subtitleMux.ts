@@ -14,7 +14,8 @@ export interface SubtitleMuxResult {
 }
 
 export type SubtitleMuxProgress = {
-  phase: "starting" | "running" | "completed";
+  phase: "starting" | "running" | "completed" | "failed";
+  diagnostics?: string;
   outTimeMs?: number;
   outTimeLabel?: string;
   speed?: string;
@@ -34,7 +35,7 @@ export const buildSubtitleMuxCommand = (
   ffmpegPath,
   "-nostdin",
   "-loglevel",
-  "error",
+  "info",
   "-progress",
   "pipe:1",
   "-nostats",
@@ -162,22 +163,36 @@ export const mergeVideoWithSubtitle = async (
     throw new Error(classification.error);
   }
 
-  onProgress?.({ phase: "starting", message: "正在启动 ffmpeg" });
+  // 记录最终传给 spawn 的参数，不在前端根据当前表单重建命令。
+  const command = buildSubtitleMuxCommand(
+    input,
+    resolveExecutable(input.ffmpegPath?.trim() || "ffmpeg"),
+  );
+  const quote = (value: string) => process.platform === "win32"
+    ? `'${value.replace(/'/g, "''")}'`
+    : `'${value.replace(/'/g, "'\\''")}'`;
+  const commandLine = `${process.platform === "win32" ? "& " : ""}${command.map(quote).join(" ")}`;
+  const report = (status: string, log = "") => [
+    `平台: ${process.platform}`,
+    `命令（${process.platform === "win32" ? "PowerShell" : "POSIX Shell"}）:`,
+    commandLine,
+    "实际参数（JSON）:",
+    JSON.stringify(command, null, 2),
+    status,
+    "FFmpeg 日志:",
+    log || "（无）",
+  ].join("\n");
+  onProgress?.({ phase: "starting", message: "正在启动 ffmpeg", diagnostics: report("状态: 正在启动") });
 
-  let process: SpawnProcess;
+  let child: SpawnProcess;
   try {
-    process = spawn(
-      buildSubtitleMuxCommand(
-        input,
-        resolveExecutable(input.ffmpegPath?.trim() || "ffmpeg"),
-      ),
-      {
+    child = spawn(command, {
       stdout: "pipe",
       stderr: "pipe",
-      },
-    );
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    onProgress?.({ phase: "failed", message, diagnostics: report("状态: 启动失败", message) });
     if (/ENOENT/i.test(message)) {
       throw new Error("未找到 ffmpeg，请先安装并确认它在 PATH 中");
     }
@@ -185,11 +200,17 @@ export const mergeVideoWithSubtitle = async (
   }
 
   const [exitCode, stderrText] = await Promise.all([
-    process.exited,
-    new Response(process.stderr as ReadableStream<Uint8Array>).text(),
-    readFfmpegProgress(process.stdout as ReadableStream<Uint8Array>, onProgress),
+    child.exited,
+    new Response(child.stderr as ReadableStream<Uint8Array>).text(),
+    readFfmpegProgress(child.stdout as ReadableStream<Uint8Array>, onProgress),
   ]);
 
+  // 即使执行失败也回传命令和日志，便于回查部分生成的视频。
+  onProgress?.({
+    phase: exitCode === 0 ? "completed" : "failed",
+    message: exitCode === 0 ? "封装完成" : `封装失败（退出码 ${exitCode}）`,
+    diagnostics: report(`退出码: ${exitCode}`, stderrText.trim()),
+  });
   if (exitCode !== 0) {
     throw new Error(stderrText.trim() || `ffmpeg exited with code ${exitCode}`);
   }
