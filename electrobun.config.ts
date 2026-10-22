@@ -15,7 +15,8 @@ export default {
     watchIgnore: ["dist/**"],
     copy: { dist: "views/main" },
     mac: {
-      icons: "assets/AppIcon.icon",
+      // 框架先生成兼容图标；构建钩子再安装预编译的原生图标及 ICNS 回退。
+      icons: "assets/app-icon.iconset",
       bundleCEF: false,
       codesign: false,
       notarize: false,

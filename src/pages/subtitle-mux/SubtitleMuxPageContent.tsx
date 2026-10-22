@@ -856,6 +856,10 @@ export const SubtitleMuxPageContent = ({
                   </PopoverPrimitive.Content>
                 </PopoverPrimitive.Portal>
               </PopoverPrimitive.Root>
+              {/* 版本由 Vite 从 package.json 注入，与桌面打包版本保持一致。 */}
+              <p className="px-1.5 pt-1 text-[length:var(--font-size-caption)] text-muted-foreground" aria-label="应用版本">
+                字幕鸭 v{__APP_VERSION__}
+              </p>
             </div>
           </>
         }

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import config from "../electrobun.config";
@@ -24,6 +24,21 @@ if (!appBundleName) {
 mkdirSync(artifactDir, { recursive: true });
 
 const appBundlePath = path.join(buildDir, appBundleName);
+// 检查最终包装应用，避免框架跳过图标编译后仍生成没有图标的安装包。
+const iconNameResult = Bun.spawnSync([
+  "/usr/libexec/PlistBuddy", "-c", "Print :CFBundleIconFile",
+  path.join(appBundlePath, "Contents", "Info.plist"),
+]);
+const iconName = iconNameResult.stdout.toString().trim();
+const iconPath = path.join(appBundlePath, "Contents", "Resources", iconName.endsWith(".icns") ? iconName : `${iconName}.icns`);
+// Tahoe 原生外观依赖资源目录，不能只检查旧系统的 ICNS 回退。
+if (!existsSync(path.join(appBundlePath, "Contents/Resources/Assets.car"))) {
+  throw new Error("Missing macOS native icon catalog: Assets.car");
+}
+if (iconNameResult.exitCode !== 0 || !iconName || !existsSync(iconPath)
+  || readFileSync(iconPath).subarray(0, 4).toString() !== "icns") {
+  throw new Error(`Missing or invalid macOS app icon: ${iconPath}`);
+}
 const dmgArch = arch === "arm64" ? "aarch64" : "x64";
 const dmgPath = path.join(artifactDir, `subtitle-duck_${releaseVersion}_${dmgArch}.dmg`);
 const zipPath = path.join(artifactDir, `subtitle-duck_${releaseVersion}_${dmgArch}.app.zip`);

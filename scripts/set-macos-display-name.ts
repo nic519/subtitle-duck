@@ -58,6 +58,17 @@ const setPlistValue = (key: string, value: string) => {
 setPlistValue("CFBundleDisplayName", displayName);
 setPlistValue("CFBundleName", displayName);
 
+// 内层应用和外层自解压包装均使用同一份原生图标，避免 Tahoe 给方形 PNG 套白底。
+// 保存编译产物使 CI 无需依赖 Xcode 26；修改源图后运行 compile-macos-icon.ts。
+for (const file of ["Assets.car", "AppIcon.icns"]) {
+  cpSync(
+    path.resolve(import.meta.dir, "../assets/macos", file),
+    path.join(appBundlePath, "Contents/Resources", file),
+  );
+}
+setPlistValue("CFBundleIconName", "AppIcon");
+setPlistValue("CFBundleIconFile", "AppIcon");
+
 const nativeFileDropBridgeSource = path.resolve(
   import.meta.dir,
   "../native/macos/build/libSubtitleDuckFileDropBridge.dylib"
