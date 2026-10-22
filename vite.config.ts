@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
+import { electrobunViteAliases } from "./.hutch/devkit/api/config/electrobun-vite";
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -37,9 +38,11 @@ export default defineConfig(({ mode }) => {
       target: "es2020",
     },
     resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "./src"),
-      },
+      alias: [
+        // Electrobun 2 的 SDK 由 sync 生成，npm 包仅保留 CLI 入口。
+        ...electrobunViteAliases(path.resolve(__dirname, ".hutch/devkit")),
+        { find: "@", replacement: path.resolve(__dirname, "./src") },
+      ],
     },
   };
 });

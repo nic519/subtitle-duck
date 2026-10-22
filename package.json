@@ -4,18 +4,19 @@
   "description": "独立字幕桌面工具",
   "type": "module",
   "scripts": {
-    "dev": "bun run prepare:native-file-drop && bun scripts/dev-desktop.ts",
+    "dev": "bun run prepare:electrobun && bun run prepare:native-file-drop && bun scripts/dev-desktop.ts",
     "prepare:native-file-drop": "bun scripts/build-native-file-drop-bridge.ts",
-    "build:renderer": "tsc && vite build",
+    "build:renderer": "bun run prepare:electrobun && tsc && vite build",
     "build": "bun run build:renderer && bun run prepare:native-file-drop && electrobun build",
     "build:release": "bun run build:renderer && bun run prepare:native-file-drop && electrobun build --env=stable",
     "package": "bun run build:release && bun scripts/package-desktop.ts stable",
     "verify": "bun scripts/verify-local-app.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "prepare:electrobun": "electrobun sync"
   },
   "dependencies": {
     "clsx": "^2.1.1",
-    "electrobun": "^1.18.1",
+    "electrobun": "2.0.4",
     "google-translate-api-x": "10.7.3",
     "lucide-react": "^1.17.0",
     "radix-ui": "^1.4.3",

@@ -417,7 +417,9 @@ const FfmpegInstallGuide = ({
       <div>macOS（推荐 Homebrew）</div>
       <InstallCommand>brew install ffmpeg</InstallCommand>
       <div>Windows（PowerShell）</div>
-      <InstallCommand>winget install Gyan.FFmpeg</InstallCommand>
+      <InstallCommand>winget install --id Gyan.FFmpeg -e</InstallCommand>
+      <div>Linux（Ubuntu / Debian）</div>
+      <InstallCommand>sudo apt update && sudo apt install ffmpeg</InstallCommand>
       <div>安装验证</div>
       <InstallCommand>ffmpeg -version</InstallCommand>
     </div>
@@ -454,6 +456,32 @@ const FasterWhisperInstallGuide = ({
           <InstallCommand>{`${pythonPath} -m pip install --upgrade faster-whisper huggingface_hub`}</InstallCommand>
           <div>下载模型（示例）</div>
           <InstallCommand>huggingface-cli download Systran/faster-whisper-large-v3 --local-dir ~/Models/faster-whisper-large-v3</InstallCommand>
+          <div>
+            也可手动下载：
+            <a
+              href="https://huggingface.co/Systran/faster-whisper-large-v3/tree/main"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground underline underline-offset-4"
+            >
+              打开 large-v3 模型下载页
+            </a>
+          </div>
+          {/* 本地识别需要完整模型目录，提供配套文件直链，避免只下载权重。 */}
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {["model.bin", "config.json", "preprocessor_config.json", "tokenizer.json", "vocabulary.json"].map((file) => (
+              <a
+                key={file}
+                href={`https://huggingface.co/Systran/faster-whisper-large-v3/resolve/main/${file}?download=true`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline underline-offset-4"
+              >
+                {file === "model.bin" ? "model.bin（约 3.09 GB）" : file}
+              </a>
+            ))}
+          </div>
+          <p>将以上 5 个文件保存到同一个文件夹，保留原文件名。下载完成后，在上方「识别模型」中粘贴该文件夹路径，或点击文件夹图标选择目录，再点击「重新检测」。</p>
         </>
       )}
     </div>
@@ -552,6 +580,9 @@ export const SubtitleMuxPageContent = ({
 
   const ffmpegUnavailable = ffmpegStatus?.available === false;
   const fasterWhisperUnavailable = fasterWhisperStatus?.available === false;
+  // 状态栏仅展示版本号，避免构建参数挤占侧栏；完整输出仍保留在悬浮提示中。
+  const ffmpegVersion = ffmpegStatus?.version
+    ?.match(/^ffmpeg version\s+(\S+)/i)?.[1];
   const ffmpegStatusLabel = ffmpegStatus
     ? ffmpegStatus.available
       ? `ffmpeg 可用${ffmpegStatus.version ? `: ${ffmpegStatus.version.split(/\r?\n/)[0]}` : ""}`
@@ -559,7 +590,7 @@ export const SubtitleMuxPageContent = ({
     : "正在检测 ffmpeg";
   const ffmpegStatusShortLabel = ffmpegStatus
     ? ffmpegStatus.available
-      ? "ffmpeg 可用"
+      ? `FFmpeg ${ffmpegVersion ?? "可用（版本未知）"}`
       : "未检测到 ffmpeg"
     : "正在检测 ffmpeg";
   const ffmpegStatusTitle = [ffmpegStatusLabel, ffmpegStatus?.error]
@@ -706,7 +737,7 @@ export const SubtitleMuxPageContent = ({
                 <button
                   type="button"
                   data-subtitle-tool-ffmpeg-status={
-                    ffmpegUnavailable ? "unavailable" : "available"
+                    !ffmpegStatus ? "checking" : ffmpegUnavailable ? "unavailable" : "available"
                   }
                   title={ffmpegStatusTitle || undefined}
                   className={`flex cursor-pointer list-none items-center gap-1.5 rounded-[var(--control-radius-sm)] px-1.5 py-1 text-[length:var(--font-size-caption)] outline-none transition-colors hover:bg-[var(--detail-secondary-action-hover-bg)] focus-visible:ring-2 focus-visible:ring-[var(--control-accent)] [&::-webkit-details-marker]:hidden ${
@@ -715,12 +746,14 @@ export const SubtitleMuxPageContent = ({
                       : "text-muted-foreground"
                   }`}
                 >
-                  {ffmpegUnavailable ? (
+                  {!ffmpegStatus ? (
+                    <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
+                  ) : ffmpegUnavailable ? (
                     <AlertCircle className="size-3.5 shrink-0" />
                   ) : (
                     <CircleCheck className="size-3.5 shrink-0 text-[var(--brand-500)]" />
                   )}
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0 break-all text-left">
                     {ffmpegStatusShortLabel}
                   </span>
                 </button>
@@ -755,6 +788,12 @@ export const SubtitleMuxPageContent = ({
                       <FolderOpen className="size-3.5" />
                     </ToolbarIconButton>
                   </div>
+                  {ffmpegUnavailable ? (
+                    <FfmpegInstallGuide
+                      darkMode={darkMode}
+                      onRefresh={onRefreshFfmpegStatus}
+                    />
+                  ) : null}
                   </PopoverPrimitive.Content>
                 </PopoverPrimitive.Portal>
               </PopoverPrimitive.Root>

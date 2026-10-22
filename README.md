@@ -26,7 +26,7 @@
 
 - React + TypeScript：桌面端界面和交互
 - Vite：前端构建
-- Electrobun：桌面窗口、本地文件和系统能力
+- Electrobun 2.0.4（Bun 主进程）：桌面窗口、本地文件和系统能力
 - FFmpeg：视频与字幕合并
 - Whisper / faster-whisper：语音转字幕
 - Bun：依赖管理、测试和脚本运行
@@ -41,6 +41,8 @@ bun install
 # 启动桌面开发环境
 bun run dev
 ```
+
+首次运行 `dev` 或 `build` 会通过 `electrobun sync` 下载配套工具链并生成 `.hutch/devkit`（需要网络）。该目录不提交；依赖仍由 Bun 和 `bun.lock` 管理。
 
 本地字幕生成和字幕合并需要可用的 FFmpeg；字幕生成还需要 Whisper / faster-whisper 运行环境和模型。
 

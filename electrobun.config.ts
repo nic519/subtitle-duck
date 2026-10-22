@@ -9,6 +9,8 @@ export default {
   app: { name: "subtitle-duck", identifier: "com.subtitleduck.app", version: packageJson.version },
   runtime: { exitOnLastWindowClosed: true },
   build: {
+    // 升级框架时保留 Bun，避免同时改变原生 FFI 和子进程的运行环境。
+    mainProcess: "bun",
     bun: { entrypoint: "src/desktop/index.ts" },
     watchIgnore: ["dist/**"],
     copy: { dist: "views/main" },
