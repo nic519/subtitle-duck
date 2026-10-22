@@ -126,6 +126,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force portable-work | Out-Null
           $launcher = Get-ChildItem build\stable-win-x64 -Recurse -File -Filter launcher.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $launcher) {
             # 兼容旧版 Electrobun：只有构建目录没有 launcher 时才解压更新包。
@@ -134,7 +135,6 @@ jobs:
             $zstd = Get-ChildItem node_modules,build -Recurse -File -Filter zig-zstd.exe -ErrorAction SilentlyContinue | Select-Object -First 1
             if (-not $tarZst) { throw "Windows update tarball not found." }
             if (-not $zstd) { throw "zig-zstd.exe not found." }
-            New-Item -ItemType Directory -Force portable-work | Out-Null
             & $zstd.FullName decompress -i $tarZst.FullName -o portable-work\subtitle-duck.tar
             tar -xf portable-work\subtitle-duck.tar -C portable-work
             $launcher = Get-ChildItem portable-work -Recurse -File -Filter launcher.exe | Select-Object -First 1
