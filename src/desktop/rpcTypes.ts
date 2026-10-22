@@ -31,6 +31,7 @@ type CliStatus = {
 export type DesktopRPC = {
   bun: RPCSchema<{
     requests: {
+      isWindowMaximized: { params: void; response: boolean };
       configGet: { params: { key: string }; response: string | null };
       configSet: { params: { key: string; value: string }; response: string };
       openFilePath: { params: { filePath: string }; response: void };
@@ -55,7 +56,11 @@ export type DesktopRPC = {
       getFfmpegStatus: { params: void; response: CliStatus };
       getFasterWhisperStatus: { params: void; response: FasterWhisperStatus };
     };
-    messages: {};
+    messages: {
+      minimizeWindow: void;
+      toggleMaximizeWindow: void;
+      closeWindow: void;
+    };
   }>;
   webview: RPCSchema<{
     requests: {};

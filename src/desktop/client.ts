@@ -78,6 +78,11 @@ subtitleGenerationTaskSession.subscribe(task => {
 
 export const desktopApi = {
   isDesktop: isElectrobun,
+  // 浏览器预览不模拟原生操作，标题栏按钮由组件禁用。
+  isWindowMaximized: () => electrobun?.rpc.request.isWindowMaximized() ?? Promise.resolve(false),
+  minimizeWindow: () => electrobun?.rpc.send.minimizeWindow(),
+  toggleMaximizeWindow: () => electrobun?.rpc.send.toggleMaximizeWindow(),
+  closeWindow: () => electrobun?.rpc.send.closeWindow(),
   subtitleGenerationBatch,
   configGet: (key: string) => electrobun?.rpc.request.configGet({ key }) ?? Promise.resolve(browserConfigGet(key)),
   configSet: (key: string, value: string) => electrobun?.rpc.request.configSet({ key, value }) ?? Promise.resolve(browserConfigSet(key, value)),

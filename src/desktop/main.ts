@@ -108,6 +108,7 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
   maxRequestTime: DESKTOP_RPC_MAX_REQUEST_TIME_MS,
   handlers: {
     requests: {
+      isWindowMaximized: () => mainWindow?.isMaximized() ?? false,
       configGet: ({ key }) => configGet(key),
       configSet: async ({ key, value }) => (await configSet(key, value)) ?? "",
       openFilePath: ({ filePath }) => openFilePath(filePath),
@@ -209,7 +210,15 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
         }
       },
     },
-    messages: {},
+    messages: {
+      // Windows 自绘标题栏只发送明确的窗口操作，实际状态由原生窗口决定。
+      minimizeWindow: () => mainWindow?.minimize(),
+      toggleMaximizeWindow: () => {
+        if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+        else mainWindow?.maximize();
+      },
+      closeWindow: () => mainWindow?.close(),
+    },
   },
   });
 
@@ -217,7 +226,8 @@ mainWindow = new BrowserWindow({
   title: "字幕鸭",
   url: Bun.env.ELECTROBUN_RENDERER_URL ?? "views://main/index.html",
   frame: { x: 100, y: 100, width: 1100, height: 760 },
-  titleBarStyle: "hiddenInset",
+  // Windows 自绘同背景标题栏；macOS 保留原生红黄绿按钮及现有布局。
+  titleBarStyle: process.platform === "win32" ? "hidden" : "hiddenInset",
   renderer: "native",
   rpc,
 });

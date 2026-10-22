@@ -1,3 +1,4 @@
+import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { SubtitleMuxPage } from "./pages/subtitle-mux/SubtitleMuxPage";
 
@@ -8,6 +9,7 @@ const SubtitleDuck = () => (
           aria-hidden="true"
           className="window-drag-region electrobun-webkit-app-region-drag shrink-0"
         />
+        <WindowsTitleBar />
         <SubtitleMuxPage />
       </main>
     </div>

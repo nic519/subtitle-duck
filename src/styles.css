@@ -274,6 +274,59 @@ body {
   background: var(--app-bg);
 }
 
+/* Windows 自绘栏与应用共用背景；按钮独立于拖动区域，避免点击触发拖窗。 */
+.windows-title-bar {
+  display: none;
+  height: 36px;
+  background: var(--app-bg);
+  color: var(--app-text);
+  user-select: none;
+}
+
+:root[data-platform="windows"] .windows-title-bar {
+  display: flex;
+}
+
+.windows-title-bar-drag {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  padding-left: 14px;
+  font-size: 12px;
+}
+
+.windows-window-controls {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.windows-window-controls button {
+  display: flex;
+  width: 46px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.windows-window-controls button:hover {
+  background: var(--control-fill-hover);
+}
+
+.windows-window-controls button:focus-visible {
+  outline: 2px solid var(--control-accent);
+  outline-offset: -3px;
+}
+
+.windows-window-controls .windows-close-button:hover {
+  background: #c42b1c;
+  color: white;
+}
+
 .dark:root {
   color-scheme: dark;
   --body-text: #f4f4f6;
