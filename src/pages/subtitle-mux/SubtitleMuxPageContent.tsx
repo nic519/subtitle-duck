@@ -1,5 +1,5 @@
 import { ManagedWhisperPanel } from "./ManagedWhisperPanel";
-import { fasterWhisperModels, getFasterWhisperDownloadCommand } from "../../subtitle-mux/fasterWhisperModels";
+import { SubtitleFileMergePanel } from "./SubtitleFileMergePanel";
 import type { SubtitleGenerationBatchSnapshot } from "../../subtitle-mux/subtitleGenerationBatch";
 import { SubtitleGenerationBatchList } from "./SubtitleGenerationBatchList";
 import {
@@ -491,55 +491,6 @@ const FfmpegInstallGuide = ({
   </DependencyGuide>
 );
 
-const FasterWhisperInstallGuide = ({
-  darkMode,
-  pythonPath,
-}: {
-  darkMode: boolean;
-  pythonPath: string;
-}) => {
-  const [modelId, setModelId] = useState("large-v3");
-  const model = fasterWhisperModels.find((item) => item.id === modelId)!;
-  return (
-    <DependencyGuide darkMode={darkMode}>
-      <div className="grid min-w-0 items-start gap-x-4 gap-y-4 lg:grid-cols-2">
-        <div className="grid min-w-0 gap-2">
-          <div className="flex h-8 items-center">手动安装 · macOS / Linux</div>
-          <InstallCommand>{`uv venv --python 3.12 ~/.venvs/subtitle-duck\nuv pip install --python ~/.venvs/subtitle-duck/bin/python faster-whisper==1.2.1 huggingface-hub==0.36.0\nsource ~/.venvs/subtitle-duck/bin/activate`}</InstallCommand>
-          <p>安装后将运行环境设为该虚拟环境的 Python。当前配置：<span className="break-all">{pythonPath}</span></p>
-        </div>
-        <div className="grid min-w-0 gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0">下载模型</span>
-            <Select value={modelId} onValueChange={setModelId}>
-              <SelectTrigger aria-label="下载模型" className="h-8 min-w-0 flex-1 text-[length:var(--font-size-caption)]">
-                <span className="truncate">{model.label}</span>
-              </SelectTrigger>
-              <SelectContent>
-                {fasterWhisperModels.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <InstallCommand key={model.id}>{getFasterWhisperDownloadCommand(model.repo)}</InstallCommand>
-          <details key={`manual-${model.id}`}>
-            <summary className="cursor-pointer py-1">手动下载</summary>
-            <div className="grid gap-2 pt-2">
-              <a href={`https://huggingface.co/${model.repo}/tree/main`} target="_blank" rel="noopener noreferrer" className="text-foreground underline underline-offset-4">{model.label} 下载页</a>
-              {/* 文件直链随模型切换，不沿用其他模型的体积或路径。 */}
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {model.files.map((file) => (
-                  <a key={file} href={`https://huggingface.co/${model.repo}/resolve/main/${file}?download=true`} target="_blank" rel="noopener noreferrer" className="text-foreground underline underline-offset-4">{file}</a>
-                ))}
-              </div>
-              <p>将以上文件原名保存到同一目录，再选为识别模型。</p>
-            </div>
-          </details>
-        </div>
-      </div>
-    </DependencyGuide>
-  );
-};
-
 export const SubtitleMuxPageContent = ({
   darkMode,
   activeTool,
@@ -632,6 +583,7 @@ export const SubtitleMuxPageContent = ({
   onRevealOutput,
 }: SubtitleMuxPageContentProps) => {
   const [managedWhisperLog, setManagedWhisperLog] = useState("");
+  const [whisperReady, setWhisperReady] = useState<boolean | null>(null);
   const hasGenerationBatch = generationBatch.items.length > 0;
   const previewPlayback = useVideoPreviewPlayback(generationVideoPreview);
   const [generationDropNotice, setGenerationDropNotice] = useState<
@@ -1071,8 +1023,11 @@ export const SubtitleMuxPageContent = ({
               id="settings"
               number="02"
               title="Faster Whisper"
+              titleAccessory={<span className={`ml-auto text-[length:var(--font-size-caption)] ${whisperReady ? "text-[var(--status-success-text)]" : "text-muted-foreground"}`}>
+                {whisperReady === null ? "检测中" : whisperReady ? "已就绪" : "待安装"}
+              </span>}
               state={generationStepStates.settings}
-              isLast={hasGenerationBatch}
+              isLast={false}
             >
               <div
                 data-subtitle-generate-whisper-card="compact"
@@ -1178,6 +1133,7 @@ export const SubtitleMuxPageContent = ({
               currentModel={fasterWhisperModelPath}
               onUseModel={onSaveFasterWhisperModelPath}
               onLogChanged={setManagedWhisperLog}
+              onReadinessChanged={setWhisperReady}
               onEnvironmentChanged={async path => {
                 await onChangeFasterWhisperPythonPath(path);
                 await onRefreshFasterWhisperStatus();
@@ -1196,19 +1152,7 @@ export const SubtitleMuxPageContent = ({
               isLast
             >
             <div className="grid gap-2.5">
-              {/* 常驻展示局部更新能力及同名文件约束，操作前即可了解替换范围。 */}
-              <div className="mb-1 flex items-start gap-2.5 border-l-2 border-[var(--subtitle-accent-border)] py-1 pl-3">
-                <Captions className="mt-0.5 size-4 shrink-0 text-[var(--subtitle-accent-muted)]" aria-hidden="true" />
-                <div className="min-w-0 space-y-1">
-                  <p className="text-sm font-medium text-foreground">局部重识别，字幕精准更新</p>
-                  <p className="text-[length:var(--font-size-caption)] leading-relaxed text-muted-foreground">
-                    用「设为开始 / 结束」选定片段，只更新选中时间段的字幕，其余内容保留，无需重新识别整段视频。
-                  </p>
-                  <p className="text-[length:var(--font-size-caption)] leading-relaxed text-muted-foreground">
-                    局部识别会更新视频同目录、同名的 SRT；没有同名字幕时新建。失败或未完成的片段保留原文，全文识别另存文件。
-                  </p>
-                </div>
-              </div>
+              <p className="text-[length:var(--font-size-caption)] text-muted-foreground">选择片段或识别全片，字幕另存为 SRT。</p>
 
             <div className="grid gap-2.5">
               {generationVideoPreview && !previewPlayback.isUnavailable ? (
@@ -1301,11 +1245,11 @@ export const SubtitleMuxPageContent = ({
             </WorkflowStep> : generationStatusTone === "error" && generationStatusMessage ? (
               <StatusMessage tone="error">{generationStatusMessage}</StatusMessage>
             ) : null}
+            <section aria-labelledby="subtitle-file-merge-title" className="mt-6 min-w-0 border-t border-[var(--form-field-border)] pt-5">
+              <h3 id="subtitle-file-merge-title" className="mb-3 flex items-center gap-2 text-sm font-semibold"><Combine className="size-4" />字幕合并</h3>
+              <SubtitleFileMergePanel darkMode={darkMode} generatedSubtitlePath={generatedSubtitlePath} />
+            </section>
             <div className="mt-4 text-[length:var(--font-size-caption)] text-muted-foreground">
-              <details>
-                <summary className="cursor-pointer">手动安装与模型下载链接</summary>
-                <FasterWhisperInstallGuide darkMode={darkMode} pythonPath={fasterWhisperPythonPath?.trim() || "python3"} />
-              </details>
               {managedWhisperLog && <details className="mt-3">
                 <summary className="cursor-pointer">安装与下载日志</summary>
                 <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px]">{managedWhisperLog}</pre>

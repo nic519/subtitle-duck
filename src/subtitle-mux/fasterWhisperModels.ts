@@ -11,7 +11,3 @@ export const fasterWhisperModels = [
   { id: "large-v3", label: "large-v3", files: extendedFiles, repo: "Systran/faster-whisper-large-v3" },
   { id: "chickenrice-v2", label: "海南鸡（日语→中文）", files: extendedFiles, repo: "chickenrice0721/whisper-large-v2-translate-zh-v0.2-st-ct2" },
 ];
-
-// 仓库名同时作为本地目录名，确保不同模型下载到独立目录。
-export const getFasterWhisperDownloadCommand = (repo: string) =>
-  `hf download ${repo} --local-dir ~/Models/${repo.split("/").at(-1)}`;

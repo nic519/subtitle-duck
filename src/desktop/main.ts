@@ -21,6 +21,7 @@ import { DESKTOP_RPC_MAX_REQUEST_TIME_MS } from "./rpcRequestPolicy";
 import type { DesktopRPC } from "./rpcTypes";
 import { mergeVideoWithSubtitle } from "./subtitles/subtitleMux";
 import { translateSubtitleFile } from "./subtitles/subtitleTranslation";
+import { mergeSubtitleFiles } from "./subtitles/mergeSubtitleFiles";
 import { resolveCliExecutable } from "./cliExecutable";
 import { createGoogleTranslateTextService } from "./googleTranslate";
 import { getFasterWhisperStatus } from "./transcription/fasterWhisperStatus";
@@ -130,6 +131,7 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
       selectSubtitleMuxVideoFile: () => chooseSubtitleMuxFile({ openFileDialog: Utils.openFileDialog, allowedFileTypes: "mp4,mkv,avi,mov,wmv,m4v,ts,webm" }),
       selectSubtitleMuxSubtitleFile: () => chooseSubtitleMuxFile({ openFileDialog: Utils.openFileDialog, allowedFileTypes: "srt,ass,ssa" }),
       selectSubtitleTranslationFile: () => chooseSubtitleMuxFile({ openFileDialog: Utils.openFileDialog, allowedFileTypes: "srt" }),
+      mergeSubtitleFiles: (input) => mergeSubtitleFiles(input),
       selectFfmpegBinaryFile: () => chooseCliExecutableFile({ openFileDialog: Utils.openFileDialog }),
       selectFasterWhisperPythonFile: () => chooseFasterWhisperPythonFile({ openFileDialog: Utils.openFileDialog }),
       selectFasterWhisperModelDirectory: () => chooseFasterWhisperModelDirectory({ openFileDialog: Utils.openFileDialog }),
@@ -187,7 +189,6 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
           return await transcribeVideoSubtitleRanges({
             videoPath,
             outputPath,
-            replaceExistingSubtitle: existsSync(outputPath),
             modelPath: faster.modelPath,
             language,
             ranges,

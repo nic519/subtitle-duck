@@ -6,47 +6,38 @@ import { getAvailableWhisperOutputPathForRanges, transcribeVideoSubtitleRanges }
 
 const original = '1\n00:00:00,000 --> 00:00:20,000\n原文第一行\n<i>第二行</i>\n\n2\n00:00:30,000 --> 00:00:40,000\n后面的字幕\n';
 
-describe('局部字幕替换', () => {
-  test('局部识别复用同名字幕，全文识别仍另存', () => {
+describe('识别结果独立保存', () => {
+  test('局部和全文识别均避开已有字幕', () => {
     const exists = (path: string) => path === '/video.srt';
-    expect(getAvailableWhisperOutputPathForRanges('/video.mp4', exists, [{startMs:5000,endMs:10000}], 40000)).toBe('/video.srt');
-    expect(getAvailableWhisperOutputPathForRanges('/video.mp4', exists, [{startMs:0,endMs:40000}], 40000)).toBe('/video-2.srt');
+    for (const ranges of [[{startMs:5000,endMs:10000}], [{startMs:0,endMs:40000}]]) {
+      expect(getAvailableWhisperOutputPathForRanges('/video.mp4', exists, ranges, 40000)).toBe('/video-2.srt');
+    }
   });
 
-  for (const mode of ['success', 'empty', 'failed', 'cancel', 'partial-cancel', 'invalid', 'edited', 'write-failed'] as const) {
-    test(`真实文件保留选区外内容：${mode}`, async () => {
-      const dir = await mkdtemp(join(tmpdir(), 'subtitle-replace-'));
-      const outputPath = join(dir, 'video.srt');
-      const controller = new AbortController();
-      const source = mode === 'invalid' ? '无法解析的字幕' : original;
-      await writeFile(outputPath, source);
+  for (const mode of ['success', 'failed', 'cancel'] as const) {
+    test(`选区识别不读取或修改原字幕：${mode}`, async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'subtitle-separate-'));
+      const originalPath = join(dir, 'video.srt');
+      await writeFile(originalPath, original);
       try {
-        const run = transcribeVideoSubtitleRanges({videoPath:join(dir,'video.mp4'), outputPath, modelPath:'/model', language:'auto', replaceExistingSubtitle:true, ranges:[{startMs:5000,endMs:10000},{startMs:30000,endMs:40000}]}, {
-          abortSignal:controller.signal,
-          ...(mode === 'write-failed' ? {writeFile:async () => { throw new Error('磁盘写入失败'); }} : {}),
-          transcribeRange:async (input) => {
-            if (mode === 'partial-cancel' && input.startMs === 30000) { controller.abort(); throw new Error('字幕生成已停止'); }
-            if (mode === 'failed' || input.startMs === 30000) throw new Error('识别失败');
-            if (mode === 'cancel') { controller.abort(); throw new Error('字幕生成已停止'); }
-            if (mode === 'edited') await writeFile(outputPath, original + '\n');
-            await writeFile(input.outputPath, mode === 'empty' ? '' : '1\n00:00:05,000 --> 00:00:12,000\n新字幕\n');
+        const ranges = [{startMs:5000,endMs:10000}];
+        const outputPath = getAvailableWhisperOutputPathForRanges(join(dir, 'video.mp4'), path => path === originalPath, ranges, 40000);
+        const result = await transcribeVideoSubtitleRanges({videoPath:join(dir,'video.mp4'), outputPath, modelPath:'/model', language:'auto', ranges}, {
+          transcribeRange:async input => {
+            if (mode !== 'success') throw new Error(mode === 'cancel' ? '字幕生成已停止' : '识别失败');
+            await writeFile(input.outputPath, '1\n00:00:05,000 --> 00:00:10,000\n新字幕\n');
             return {outputPath:input.outputPath};
           },
         });
-        if (mode === 'invalid' || mode === 'edited' || mode === 'write-failed') {
-          await expect(run).rejects.toThrow();
-          expect(await readFile(outputPath,'utf8')).toBe(mode === 'edited' ? original+'\n' : source);
+        expect(await readFile(originalPath,'utf8')).toBe(original);
+        if (mode === 'success') {
+          expect(result.outputPath).toBe(outputPath);
+          const saved = await readFile(outputPath, 'utf8');
+          expect(saved).toContain('新字幕');
+          expect(saved).toContain('00:00:05,000');
+          expect(saved).not.toContain('原文');
         } else {
-          await run;
-          const saved = await readFile(outputPath,'utf8');
-          if (mode === 'failed' || mode === 'cancel') expect(saved).toBe(original);
-          else {
-            expect(saved).toContain('00:00:00,000 --> 00:00:05,000\n原文第一行\n<i>第二行</i>');
-            expect(saved).toContain('00:00:10,000 --> 00:00:20,000\n原文第一行\n<i>第二行</i>');
-            expect(saved).toContain('00:00:30,000 --> 00:00:40,000\n后面的字幕');
-            expect(saved.includes('新字幕')).toBe(mode !== 'empty');
-            if (mode === 'success') expect(saved).toContain('00:00:05,000 --> 00:00:10,000\n新字幕');
-          }
+          expect(result.outputPath).toBeNull();
         }
       } finally { await rm(dir,{recursive:true,force:true}); }
     });

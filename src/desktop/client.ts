@@ -92,6 +92,7 @@ export const desktopApi = {
   selectSubtitleMuxVideoFile: () => electrobun?.rpc.request.selectSubtitleMuxVideoFile() ?? unavailable("选择本地视频"),
   selectSubtitleMuxSubtitleFile: () => electrobun?.rpc.request.selectSubtitleMuxSubtitleFile() ?? unavailable("选择本地字幕"),
   selectSubtitleTranslationFile: () => electrobun?.rpc.request.selectSubtitleTranslationFile() ?? unavailable("选择本地 SRT 字幕"),
+  mergeSubtitleFiles: (input: { partialPath: string; basePath: string }) => electrobun?.rpc.request.mergeSubtitleFiles(input) ?? unavailable("合并本地字幕"),
   selectFfmpegBinaryFile: () => electrobun?.rpc.request.selectFfmpegBinaryFile() ?? unavailable("选择 FFmpeg"),
   selectFasterWhisperPythonFile: () => electrobun?.rpc.request.selectFasterWhisperPythonFile() ?? unavailable("选择 Python"),
   selectFasterWhisperModelDirectory: () => electrobun?.rpc.request.selectFasterWhisperModelDirectory() ?? unavailable("选择 Faster Whisper 模型"),

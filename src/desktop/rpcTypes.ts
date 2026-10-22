@@ -1,4 +1,5 @@
 import type { ManagedWhisperRequest, ManagedWhisperSnapshot } from "./transcription/managedWhisper";
+import type { MergeSubtitleFilesInput, MergeSubtitleFilesResult } from "./subtitles/mergeSubtitleFiles";
 import type { VideoMetadata } from "./videoMetadata";
 import type { RPCSchema } from "electrobun/bun";
 import type { SubtitleMuxProgress } from "./subtitles/subtitleMux";
@@ -40,6 +41,7 @@ export type DesktopRPC = {
       selectSubtitleMuxVideoFile: { params: void; response: string | null };
       selectSubtitleMuxSubtitleFile: { params: void; response: string | null };
       selectSubtitleTranslationFile: { params: void; response: string | null };
+      mergeSubtitleFiles: { params: MergeSubtitleFilesInput; response: MergeSubtitleFilesResult };
       selectFfmpegBinaryFile: { params: void; response: string | null };
       selectFasterWhisperPythonFile: { params: void; response: string | null };
       selectFasterWhisperModelDirectory: { params: void; response: string | null };

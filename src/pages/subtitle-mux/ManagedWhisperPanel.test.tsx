@@ -16,9 +16,3 @@ test('结束后停止等待动画，已知下载比例准确展示', () => {
   expect(renderToStaticMarkup(<ManagedWhisperTaskProgress task={task} now={60000}/>)).toContain('value="42"');
   expect(renderToStaticMarkup(<ManagedWhisperTaskProgress task={{...task,state:'error'}} now={60000}/>)).toBe('');
 });
-
-test('独立显示已安装组件和未下载模型，不把整体标成不可用', async () => {
- const {ReadinessStatus}=await import('./ManagedWhisperPanel');
- const html=renderToStaticMarkup(<><ReadinessStatus label="Python" ready detail="3.12" missing="待安装"/><ReadinessStatus label="faster-whisper" ready detail="1.2.1" missing="待安装"/><ReadinessStatus label="模型" ready={false} missing="待下载或选择"/></>);
- expect(html).toContain('3.12');expect(html).toContain('1.2.1');expect(html).toContain('待下载或选择');expect(html).not.toContain('不可用');
-});

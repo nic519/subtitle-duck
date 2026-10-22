@@ -30,6 +30,7 @@ export const FilePathPicker = ({
   integratedCard = false,
   showHeader = true,
   compact = false,
+  applyOnChange = false,
   onChoose,
   onUsePath,
   onDropPaths,
@@ -48,6 +49,7 @@ export const FilePathPicker = ({
   integratedCard?: boolean;
   showHeader?: boolean;
   compact?: boolean;
+  applyOnChange?: boolean;
   onChoose: () => void | Promise<void>;
   onUsePath: (path: string) => void;
   onDropPaths: (paths: string[]) => void;
@@ -207,7 +209,11 @@ export const FilePathPicker = ({
             title={draftPath}
             disabled={disabled}
             value={draftPath}
-            onChange={(event) => setDraftPath(event.target.value)}
+            onChange={(event) => {
+              setDraftPath(event.target.value);
+              // 独立字幕合并需要立即同步编辑和清空，避免点击合并时使用上一次的路径。
+              if (applyOnChange) onUsePath(event.target.value);
+            }}
             onKeyDown={(event) => {
               if (event.key !== "Enter") return;
               event.preventDefault();

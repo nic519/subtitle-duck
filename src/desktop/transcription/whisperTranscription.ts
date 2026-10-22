@@ -1,9 +1,7 @@
-import { replaceSrtRanges } from "./replaceSrtRanges";
 import { existsSync } from "node:fs";
 import {
   readFile as defaultReadFile,
   rm as defaultRm,
-  rename,
   writeFile as defaultWriteFile,
 } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
@@ -70,8 +68,6 @@ export interface WhisperTranscriptionResult {
 export interface WhisperMultiRangeTranscriptionRequest
   extends Omit<WhisperTranscriptionRequest, "startMs" | "endMs"> {
   ranges: WhisperTimeRange[];
-  // 仅局部识别且已有同名字幕时启用，全文生成继续另存。
-  replaceExistingSubtitle?: boolean;
 }
 
 export interface WhisperMultiRangeTranscriptionResult {
@@ -143,19 +139,14 @@ export const getDefaultWhisperOutputBasePathForRanges = (
 export const getAvailableWhisperOutputPathForRanges = (
   videoPath: string,
   checkExists: (filePath: string) => boolean = existsSync,
-  ranges: WhisperTimeRange[],
-  durationMs?: number
+  _ranges: WhisperTimeRange[],
+  _durationMs?: number
 ): string => {
   const extension = extname(videoPath);
   const outputBasePath = join(dirname(videoPath), basename(videoPath, extension));
   const defaultPath = `${outputBasePath}.srt`;
   if (!checkExists(defaultPath)) return defaultPath;
-  // 只有确认选区未覆盖全片时才复用同名字幕，未知时长继续安全另存。
-  const sorted = [...ranges].sort((a, b) => a.startMs - b.startMs);
-  const coversWholeVideo = sorted.length > 0 && sorted[0].startMs === 0 &&
-    sorted[sorted.length - 1].endMs === durationMs &&
-    sorted.every((range, index) => index === 0 || range.startMs <= sorted[index - 1].endMs);
-  if (durationMs && sorted.length > 0 && !coversWholeVideo) return defaultPath;
+  // 全片和选区识别均另存，已有字幕仅由独立合并工具处理。
 
   for (let index = 2; index < 1000; index += 1) {
     const candidate = `${outputBasePath}-${index}.srt`;
@@ -689,9 +680,6 @@ export const transcribeVideoSubtitleRanges = async (
   const writeFile = deps.writeFile ?? defaultWriteFile;
   const removeFile = deps.rm ?? defaultRm;
   const transcribeRange = deps.transcribeRange ?? transcribeVideoSubtitle;
-  // 在耗时识别之前验证旧文件，保存时再次检查，避免覆盖识别期间的外部编辑。
-  const existingSubtitle = input.replaceExistingSubtitle ? await readFile(input.outputPath, "utf-8") : null;
-  if (existingSubtitle !== null) replaceSrtRanges(existingSubtitle, []);
   const singleRangeInput = input;
   const successfulSrtSegments: Array<{ content: string; offsetMs: number }> = [];
   const completedRanges: WhisperTimeRange[] = [];
@@ -799,24 +787,7 @@ export const transcribeVideoSubtitleRanges = async (
   const publishedOutputPath =
     completedRanges.length > 0 ? input.outputPath : null;
   if (publishedOutputPath) {
-    if (existingSubtitle !== null) {
-      const updated = replaceSrtRanges(existingSubtitle, successfulSrtSegments.map((segment, index) => ({
-        range: completedRanges[index], content: segment.content,
-      })));
-      // 同目录临时文件完成后再原子替换，写入失败时原字幕仍完整。
-      const temporaryPath = `${publishedOutputPath}.${crypto.randomUUID()}.tmp`;
-      try {
-        await writeFile(temporaryPath, updated, "utf-8");
-        if (await readFile(publishedOutputPath, "utf-8") !== existingSubtitle) {
-          throw new Error("字幕文件在识别期间已被修改，已取消局部替换，请重新生成");
-        }
-        await rename(temporaryPath, publishedOutputPath);
-      } finally {
-        await removeFile(temporaryPath, { force: true }).catch(() => undefined);
-      }
-    } else {
-      await writeFile(publishedOutputPath, normalizeSrtCueDurations(mergeSrtSegments(successfulSrtSegments)), "utf-8");
-    }
+    await writeFile(publishedOutputPath, normalizeSrtCueDurations(mergeSrtSegments(successfulSrtSegments)), "utf-8");
   }
 
   deps.onProgress?.({

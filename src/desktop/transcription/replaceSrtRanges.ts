@@ -17,6 +17,16 @@ const parseCues = (content: string): Cue[] => {
   });
 };
 
+// 独立合并没有识别选区元数据，以 A 的首尾时间定义连续覆盖范围；空文件不能用于清空 B。
+export const getSrtCoverageRange = (content: string): WhisperTimeRange => {
+  const cues = parseCues(content);
+  if (!cues.length) throw new Error('字幕为空，请选择包含字幕条目的 SRT 文件');
+  return cues.reduce((range, cue) => ({
+    startMs: Math.min(range.startMs, cue.startMs),
+    endMs: Math.max(range.endMs, cue.endMs),
+  }), { startMs: Infinity, endMs: 0 });
+};
+
 // 用半开区间裁剪旧字幕，跨界条目仅移除选区内部分；失败范围不传入此函数。
 export const replaceSrtRanges = (existing: string, replacements: Array<{range: WhisperTimeRange; content: string}>): string => {
   let retained = parseCues(existing);
