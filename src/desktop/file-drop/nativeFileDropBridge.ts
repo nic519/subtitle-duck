@@ -46,7 +46,8 @@ export const installNativeFileDropBridge = (
       if (paths.length > 0) onDropPaths(paths);
     },
     {
-      args: [FFIType.cstring],
+      // Bun 1.4 会自动将 cstring 回调参数转为字符串；此处由 CString 解码，必须接收原始指针。
+      args: [FFIType.ptr],
       returns: FFIType.void,
       threadsafe: true,
     }
