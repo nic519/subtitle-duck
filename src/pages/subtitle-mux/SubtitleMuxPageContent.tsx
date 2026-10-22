@@ -1,3 +1,4 @@
+import { FfmpegInstaller } from "./FfmpegInstaller";
 import { ManagedWhisperPanel } from "./ManagedWhisperPanel";
 import { SubtitleFileMergePanel } from "./SubtitleFileMergePanel";
 import type { SubtitleGenerationBatchSnapshot } from "../../subtitle-mux/subtitleGenerationBatch";
@@ -296,11 +297,11 @@ const WorkflowStep = ({
         )}
       </div>
       <div className={isLast ? "min-w-0" : "min-w-0 pb-6"}>
-        <div className="mb-2 flex min-w-0 items-center gap-2">
+        <div className={`mb-2 flex min-w-0 items-center gap-2 ${workflow === "merge" && id === "output" ? "flex-wrap" : ""}`}>
           <h3
             data-subtitle-translation-step-title={workflow === "translation" ? id : undefined}
             data-subtitle-generation-step-title={workflow === "generation" ? id : undefined}
-            className="text-[length:var(--font-size-control)] font-semibold tracking-[-0.02em] text-foreground"
+            className="shrink-0 text-[length:var(--font-size-control)] font-semibold tracking-[-0.02em] text-foreground"
           >
             {title}
           </h3>
@@ -314,36 +315,6 @@ const WorkflowStep = ({
 };
 
 // 命令保持可选中，复制按钮只写入原始命令，并明确反馈失败。
-const InstallCommand = ({ children }: { children: string }) => {
-  const [copyStatus, setCopyStatus] = useState("");
-  return (
-    <div className="min-w-0">
-      <div className="flex min-w-0 items-center gap-2 rounded-[var(--control-radius-sm)] border border-[var(--result-divider)] bg-[var(--result-surface)] px-2.5 py-1.5">
-        <code className="min-w-0 flex-1 select-text whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-[11px] leading-5 text-foreground">
-          {children}
-        </code>
-        <button
-          type="button"
-          aria-label={copyStatus === "已复制" ? "已复制命令" : "复制命令"}
-          title={copyStatus || "复制命令"}
-          className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-[var(--result-row-hover)] hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--control-accent)]"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(children);
-              setCopyStatus("已复制");
-            } catch {
-              setCopyStatus("复制失败，请选中命令后复制");
-            }
-          }}
-        >
-          {copyStatus === "已复制" ? <CircleCheck className="size-3.5" /> : <Copy className="size-3.5" />}
-        </button>
-      </div>
-      <span role="status" className={copyStatus.startsWith("复制失败") ? "text-xs text-[var(--status-error-text)]" : "sr-only"}>{copyStatus}</span>
-    </div>
-  );
-};
-
 export const SubtitleTranscriptionProgress = ({
   percent,
 }: {
@@ -431,65 +402,6 @@ export const MuxDiagnostics = ({ report }: { report: string | null }) => {
     </details>
   );
 };
-
-// 引导只补充当前缺少的操作，不重复外层步骤标题或按钮说明。
-const DependencyGuide = ({
-  title,
-  children,
-  onRefresh,
-  darkMode,
-}: {
-  title?: string;
-  children: ReactElement | ReactElement[];
-  onRefresh?: () => void | Promise<void>;
-  darkMode: boolean;
-}) => (
-  <div
-    data-subtitle-dependency-guide={title ?? "faster-whisper"}
-    className="mt-4 grid min-w-0 gap-3 border-l-2 border-[var(--subtitle-accent-border)] pl-3 text-[length:var(--font-size-caption)] text-muted-foreground"
-  >
-    {title ? (
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-medium text-foreground">{title}</span>
-        {onRefresh ? (
-          <ToolbarIconButton darkMode={darkMode} onClick={() => void onRefresh()}
-            aria-label={`重新检测 ${title.replace("安装 ", "")}`} title="重新检测" className="h-7 w-7 bg-transparent">
-            <RefreshCw className="size-3.5" />
-          </ToolbarIconButton>
-        ) : null}
-      </div>
-    ) : null}
-    {children}
-  </div>
-);
-
-const FfmpegInstallGuide = ({
-  onRefresh,
-  darkMode,
-}: {
-  onRefresh: () => void | Promise<void>;
-  darkMode: boolean;
-}) => (
-  <DependencyGuide
-    title="安装 FFmpeg"
-    onRefresh={onRefresh}
-    darkMode={darkMode}
-  >
-    <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-      {[
-        ["macOS · Homebrew", "brew install ffmpeg"],
-        ["Windows · PowerShell", "winget install --id Gyan.FFmpeg -e"],
-        ["Linux · Ubuntu / Debian", "sudo apt update && sudo apt install ffmpeg"],
-        ["安装验证", "ffmpeg -version"],
-      ].map(([label, command]) => (
-        <div key={label} className="grid min-w-0 content-start gap-2">
-          <span>{label}</span>
-          <InstallCommand>{command}</InstallCommand>
-        </div>
-      ))}
-    </div>
-  </DependencyGuide>
-);
 
 export const SubtitleMuxPageContent = ({
   darkMode,
@@ -804,7 +716,7 @@ export const SubtitleMuxPageContent = ({
                     </ToolbarIconButton>
                   </div>
                   {ffmpegUnavailable ? (
-                    <FfmpegInstallGuide
+                    <FfmpegInstaller
                       darkMode={darkMode}
                       onRefresh={onRefreshFfmpegStatus}
                     />
@@ -867,7 +779,7 @@ export const SubtitleMuxPageContent = ({
             />
 
             {ffmpegUnavailable ? (
-              <FfmpegInstallGuide
+              <FfmpegInstaller
                 darkMode={darkMode}
                 onRefresh={onRefreshFfmpegStatus}
               />
@@ -878,56 +790,43 @@ export const SubtitleMuxPageContent = ({
               workflow="merge"
               id="output"
               number="02"
-              title="合并输出"
+              title={mergeStatusTone === "success" ? "合并完成" : "合并输出"}
               state={mergeStatusTone === "success" ? "complete" : videoPath && subtitlePath ? "current" : "upcoming"}
               isLast
+              titleAccessory={
+                <div className="flex min-w-0 flex-1 basis-60 flex-wrap items-center gap-x-3 gap-y-2">
+                  <div
+                    data-subtitle-mux-output-path="true"
+                    className="min-w-0 flex-1 basis-40 break-all text-[length:var(--font-size-caption)] font-normal text-muted-foreground"
+                  >
+                    {outputPath ?? "等待视频路径"}
+                  </div>
+                  {mergeStatusTone === "success" && outputPath ? (
+                    <ToolbarButton
+                      darkMode={darkMode}
+                      onClick={() => void onRevealOutput()}
+                      disabled={isMerging}
+                      className="ml-auto shrink-0"
+                    >
+                      <FolderOpen className="size-3.5" aria-hidden="true" />
+                      打开文件夹
+                    </ToolbarButton>
+                  ) : null}
+                </div>
+              }
             >
-            <div className="flex items-start gap-3 px-3 pt-1">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--subtitle-accent-soft)] text-[var(--subtitle-accent-muted)]">
-                <FolderOpen className="size-4" />
-              </div>
-              <div className="min-w-0">
+              {/* 完成后仅保留标题、路径和操作；进度与成功提示不再重复占行。 */}
+              {isMerging && (progressMessage || mergeStatusMessage) ? (
                 <div className="text-[length:var(--font-size-caption)] text-muted-foreground">
-                  输出
+                  {progressMessage || mergeStatusMessage}
                 </div>
-                <div
-                  data-subtitle-mux-output-path="true"
-                  className={`break-all text-[length:var(--font-size-caption)] ${
-                    outputPath ? "text-foreground" : "text-muted-foreground"
-                  }`}
-                >
-                  {outputPath ?? "等待视频路径"}
+              ) : mergeStatusTone === "error" && mergeStatusMessage ? (
+                <StatusMessage tone="error">{mergeStatusMessage}</StatusMessage>
+              ) : mergeStatusTone === "neutral" && mergeStatusMessage ? (
+                <div className="text-[length:var(--font-size-caption)] text-muted-foreground">
+                  {mergeStatusMessage}
                 </div>
-              </div>
-            </div>
-
-            {progressMessage ? (
-              <div className="border-l-2 border-[var(--subtitle-accent-border)] pl-3 text-[length:var(--font-size-caption)] text-muted-foreground">
-                {progressMessage}
-              </div>
-            ) : null}
-
-            {mergeStatusTone === "success" && outputPath ? (
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <ToolbarButton
-                  darkMode={darkMode}
-                  onClick={() => void onRevealOutput()}
-                  disabled={isMerging}
-                >
-                  打开文件夹
-                </ToolbarButton>
-              </div>
-            ) : null}
-
-            {mergeStatusMessage && mergeStatusTone === "neutral" ? (
-              <div className="text-[length:var(--font-size-caption)] text-muted-foreground">
-                {mergeStatusMessage}
-              </div>
-            ) : mergeStatusMessage ? (
-              <StatusMessage tone={mergeStatusTone}>
-                {mergeStatusMessage}
-              </StatusMessage>
-            ) : null}
+              ) : null}
             </WorkflowStep>
             <MuxDiagnostics report={muxDiagnostics} />
           </div>
@@ -1121,7 +1020,7 @@ export const SubtitleMuxPageContent = ({
                 </details>
               </div>
             {ffmpegUnavailable ? (
-              <FfmpegInstallGuide
+              <FfmpegInstaller
                 darkMode={darkMode}
                 onRefresh={onRefreshFfmpegStatus}
               />

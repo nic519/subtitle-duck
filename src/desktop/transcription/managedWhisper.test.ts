@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -99,4 +99,58 @@ test("拒绝不在允许列表内的依赖源", async () => {
   // @ts-expect-error 验证不合法的外部输入
   expect(() => manager.start({kind:"install",source:"https://unknown.example"})).toThrow("未知依赖下载源");
   expect((await manager.snapshot()).task.state).toBe("idle");
+});
+
+// 删除只接收已知模型 ID；不允许删除当前配置或越界目录。
+test("删除托管模型及下载残留，保护当前模型和外部路径", async () => {
+  const root = await directory();
+  const target = join(root, "models", "tiny");
+  let modelPath = target;
+  for (const path of [target, `${target}.download`, `${target}.previous`]) {
+    await mkdir(path, { recursive: true });
+    await writeFile(join(path, "model.bin"), "weights");
+  }
+  const manager = createManagedWhisper({ root, savePython: async () => {}, getConfig: async () => ({ pythonPath: "python3", modelPath }) });
+  expect(() => manager.start({ kind: "delete", modelId: "../../outside" })).toThrow();
+  manager.start({ kind: "delete", modelId: "tiny" });
+  while ((await manager.snapshot()).task.state === "running") await Bun.sleep(5);
+  expect((await manager.snapshot()).task.state).toBe("error");
+  expect(await Bun.file(join(target, "model.bin")).exists()).toBe(true);
+  modelPath = "";
+  manager.start({ kind: "delete", modelId: "tiny" });
+  expect(() => manager.start({ kind: "model", modelId: "tiny" })).toThrow();
+  while ((await manager.snapshot()).task.state === "running") await Bun.sleep(5);
+  expect((await manager.snapshot()).task.state).toBe("done");
+  for (const path of [target, `${target}.download`, `${target}.previous`]) expect(await Bun.file(join(path, "model.bin")).exists()).toBe(false);
+});
+
+// 使用分块响应验证后台产生速率，而非只验证前端格式化。
+test("下载流产生实际速度，完成后清除速度", async () => {
+  const files: Record<string, string> = { "model.bin": "weights", "config.json": "{}", "tokenizer.json": "{}", "vocabulary.txt": "token" };
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const manager = createManagedWhisper({ root: await directory(), savePython: async () => {}, fetcher: async url => {
+    if (url.includes("/api/models/")) return Response.json({ sha: "a".repeat(40), siblings: Object.entries(files).map(([rfilename, content]) => ({ rfilename, lfs: { sha256: sha(content) } })) });
+    const name = url.split("/").at(-1)!;
+    const data = new TextEncoder().encode(files[name]);
+    if (name !== "model.bin") return new Response(data);
+    return new Response(new ReadableStream({ async start(stream) {
+      stream.enqueue(data);
+      await gate;
+      stream.close();
+    }}), { headers: { "content-length": String(data.length) } });
+  }});
+  manager.start({ kind: "model", modelId: "tiny" });
+  try {
+    let speed = 0;
+    for (let i = 0; i < 100; i++) {
+      speed = (await manager.snapshot()).task.bytesPerSecond ?? 0;
+      if (speed > 0) break;
+      await Bun.sleep(5);
+    }
+    expect(speed).toBeGreaterThan(0);
+  } finally { release(); }
+  while ((await manager.snapshot()).task.state === "running") await Bun.sleep(5);
+  expect((await manager.snapshot()).task.state).toBe("done");
+  expect((await manager.snapshot()).task.bytesPerSecond).toBeNull();
 });

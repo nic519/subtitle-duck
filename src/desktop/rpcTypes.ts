@@ -1,3 +1,4 @@
+import type { FfmpegInstallStatus } from "./ffmpeg/managedFfmpeg";
 import type { ManagedWhisperRequest, ManagedWhisperSnapshot } from "./transcription/managedWhisper";
 import type { MergeSubtitleFilesInput, MergeSubtitleFilesResult } from "./subtitles/mergeSubtitleFiles";
 import type { VideoMetadata } from "./videoMetadata";
@@ -56,6 +57,9 @@ export type DesktopRPC = {
       translateSubtitleFile: { params: TranslateSubtitleFileInput; response: TranslateSubtitleFileResult };
       cancelTranslateSubtitleFile: { params: { subtitlePath: string }; response: void };
       testSubtitleTranslationConnection: { params: { proxyUrl?: string | null }; response: { available: boolean; error: string | null } };
+      getFfmpegInstallStatus: { params: void; response: FfmpegInstallStatus };
+      installFfmpeg: { params: void; response: void };
+      cancelFfmpegInstall: { params: void; response: void };
       getFfmpegStatus: { params: void; response: CliStatus };
       getManagedWhisper: { params: void; response: ManagedWhisperSnapshot };
       detectWhisperUv: { params: void; response: ManagedWhisperSnapshot };

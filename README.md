@@ -46,6 +46,10 @@ bun run dev
 
 本地字幕生成和字幕合并需要可用的 FFmpeg；字幕生成还需要 Whisper / faster-whisper 运行环境和模型。
 
+缺少 FFmpeg 时可在应用内点击“安装 FFmpeg”。应用优先检测本机版本，否则按当前平台下载 FFmpeg 与 ffprobe，校验并验证运行后自动配置；支持进度、取消和失败重试。文件保存在应用数据目录，不随安装包分发，也不修改系统 PATH。仍可手动指定可执行文件。
+
+自动安装的二进制来自 npm 的 `@ffmpeg-installer` / `@ffprobe-installer` 平台包；版本、下载地址和 SHA-512 固定在 `src/desktop/ffmpeg/releases.json`。支持 macOS/Linux 的 arm64、x64 和 Windows x64，其他架构保留手动配置入口。更新清单时须同时验证 FFmpeg 与 ffprobe 的实际执行和媒体处理。
+
 ## 常用命令
 
 ```bash

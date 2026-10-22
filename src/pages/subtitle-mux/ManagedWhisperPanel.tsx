@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Download, RefreshCw, LoaderCircle } from "lucide-react";
+import { Download, RefreshCw, LoaderCircle, Trash2 } from "lucide-react";
 // 展示组件可在测试/静态渲染中加载；只有客户端交互才加载 Electrobun SDK。
 const loadApi = async () => (await import("../../desktop/client")).desktopApi;
 const isDesktop = typeof window !== "undefined" && Boolean(window.__electrobun);
@@ -100,6 +100,12 @@ export function ManagedWhisperPanel({ darkMode, disabled, currentModel, onUseMod
         {model ? <ToolbarButton darkMode={darkMode} className="shrink-0" disabled={disabled || busy || currentModel === model.path} onClick={async () => {
           try { setError(""); await onUseModel(model.path); } catch (reason) { setError(String(reason)); }
         }}>{currentModel === model.path ? "正在使用" : "使用此模型"}</ToolbarButton> : <ToolbarButton darkMode={darkMode} className="shrink-0" disabled={busy || !isDesktop} onClick={() => void start({ kind: "model", modelId })}><Download className="size-3.5" />下载</ToolbarButton>}
+        {model && <ToolbarIconButton darkMode={darkMode} className="h-7 w-7 shrink-0"
+          disabled={busy || disabled || !isDesktop || currentModel === model.path}
+          title={currentModel === model.path ? "请先切换模型，再删除当前模型" : "删除已下载模型"}
+          aria-label="删除已下载模型" onClick={() => void start({ kind: "delete", modelId: model.id })}>
+          <Trash2 className="size-3.5" />
+        </ToolbarIconButton>}
         </div>
       </div>
     </div>
@@ -118,9 +124,12 @@ export function ManagedWhisperTaskProgress({ task, now }: { task: ManagedWhisper
   if (task.state !== "running") return null;
   const elapsed = task.startedAt ? Math.max(0, Math.floor((now - task.startedAt) / 1000)) : 0;
   const quiet = task.lastActivityAt ? Math.max(0, Math.floor((now - task.lastActivityAt) / 1000)) : 0;
+  // 网络停滞后归零，避免把最后一次有效速率误当成仍在传输。
+  const speed = quiet >= 3 ? 0 : task.bytesPerSecond ?? 0;
+  const speedLabel = speed >= 1024 * 1024 ? `${(speed / 1024 / 1024).toFixed(1)} MB/s` : speed >= 1024 ? `${(speed / 1024).toFixed(1)} KB/s` : `${Math.round(speed)} B/s`;
   return <div className="grid gap-1.5 text-muted-foreground">
     <div className="flex items-center gap-2"><LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-      <span>处理中{task.startedAt ? ` · 已用 ${Math.floor(elapsed / 60)} 分 ${elapsed % 60} 秒` : ""}</span>
+      <span>处理中{task.startedAt ? ` · 已用 ${Math.floor(elapsed / 60)} 分 ${elapsed % 60} 秒` : ""}{task.bytesPerSecond != null ? ` · ${speedLabel}` : ""}</span>
     </div>
     <progress aria-label={task.percent == null ? "正在处理，进度未知" : "当前文件下载进度"} className="h-1.5 w-full" max={100} value={task.percent ?? undefined} />
     {task.activity && <p className="break-all">最近活动：{task.activity}</p>}

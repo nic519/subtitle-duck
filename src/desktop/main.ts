@@ -1,3 +1,5 @@
+import { createManagedFfmpeg, getFfprobePath } from "./ffmpeg/managedFfmpeg";
+import { runManagedProcess } from "./transcription/managedProcess";
 import { probeWhisperReadiness } from "./transcription/whisperReadiness";
 import { join } from "node:path";
 import { createManagedWhisper } from "./transcription/managedWhisper";
@@ -107,7 +109,24 @@ const getFfmpegPath = async () =>
 
 const resolveWithConfiguredFfmpeg = (ffmpegPath: string) =>
   (executable: string) =>
-    resolveCliExecutable(executable === "ffmpeg" || executable === "ffprobe" ? ffmpegPath.replace(/ffmpeg$/, executable) : executable);
+    resolveCliExecutable(executable === "ffmpeg" || executable === "ffprobe" ? (executable === "ffprobe" ? getFfprobePath(ffmpegPath) : ffmpegPath) : executable);
+
+const managedFfmpeg = createManagedFfmpeg({
+  root: join(Utils.paths.userData, "ffmpeg"),
+  getLocalPath: async () => {
+    for (const candidate of [await getFfmpegPath(), "ffmpeg"]) {
+      const path = resolveCliExecutable(candidate);
+      try {
+        for (const executable of [path, getFfprobePath(path)]) {
+          await runManagedProcess([executable, "-version"], { signal: AbortSignal.timeout(15_000), timeoutMs: 15_000 });
+        }
+        return path;
+      } catch { /* 当前路径失效时继续检测系统安装。 */ }
+    }
+    return null;
+  },
+  savePath: async path => { await configSet("ffmpeg_binary_path", path); },
+});
 
 const getFasterWhisperConfig = async () => ({
   pythonPath: (await configGet("faster_whisper_python_path"))?.trim() || "python3",
@@ -153,10 +172,15 @@ const rpc: ReturnType<typeof BrowserView.defineRPC<DesktopRPC>> =
         };
       },
       getFfmpegStatus: async () => getCliStatus(await getFfmpegPath(), ["-version"]),
+      getFfmpegInstallStatus: () => managedFfmpeg.snapshot(),
+      installFfmpeg: () => managedFfmpeg.start(),
+      cancelFfmpegInstall: () => managedFfmpeg.cancel(),
       getManagedWhisper: () => managedWhisper.snapshot(),
       detectWhisperUv: async () => { await managedWhisper.detectUv(); return managedWhisper.snapshot(); },
       startManagedWhisper: request => {
         if ((request.kind === "install" || request.kind === "prepare") && activeTranscriptions.size) throw new Error("请等待字幕生成完成后安装环境");
+        // 删除与生成互斥，避免移除仍被识别任务读取的模型文件。
+        if (request.kind === "delete" && activeTranscriptions.size) throw new Error("请等待字幕生成完成后删除模型");
         managedWhisper.start(request);
       },
       cancelManagedWhisper: () => managedWhisper.cancel(),
@@ -270,6 +294,7 @@ if (Bun.env.SUBTITLE_DUCK_VERIFY_LOCAL_APP === "1") {
 
 process.once("exit", () => {
   managedWhisper.cancel();
+  managedFfmpeg.cancel();
   activeTranscriptions.forEach((controller) => controller.abort());
   activeSubtitleTranslations.forEach((controller) => controller.abort());
   previewServer.stop();

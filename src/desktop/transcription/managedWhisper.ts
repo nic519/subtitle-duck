@@ -2,20 +2,20 @@ import { probeWhisperReadiness, prepareWhisper, type WhisperReadiness } from "./
 import { runManagedProcess } from "./managedProcess";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fasterWhisperModels } from "../../subtitle-mux/fasterWhisperModels";
 import { resolveCliExecutable } from "../cliExecutable";
 import requirements from "../../../resources/faster-whisper/requirements.lock" with { type: "text" };
 
-export type ManagedWhisperRequest = { kind: "prepare"; modelId: string; source?: "pypi" | "tuna" } | { kind: "install"; source?: "pypi" | "tuna" } | { kind: "model"; modelId: string };
+export type ManagedWhisperRequest = { kind: "prepare"; modelId: string; source?: "pypi" | "tuna" } | { kind: "install"; source?: "pypi" | "tuna" } | { kind: "model" | "delete"; modelId: string };
 export type ManagedWhisperSnapshot = {
   uv: { path: string; version: string; source: "local" | "managed" } | null;
   pythonPath: string | null;
   components: WhisperReadiness | null;
   models: { id: string; path: string }[];
-  task: { state: "idle" | "running" | "done" | "error" | "cancelled"; message: string; percent: number | null; log: string; startedAt: number | null; lastActivityAt: number | null; activity: string };
+  task: { state: "idle" | "running" | "done" | "error" | "cancelled"; message: string; percent: number | null; log: string; startedAt: number | null; lastActivityAt: number | null; activity: string; bytesPerSecond?: number | null };
 };
 const UV_VERSION = "0.13.5";
 // 固定发行包及摘要，禁止执行未经校验的网络安装脚本。
@@ -113,7 +113,41 @@ export function createManagedWhisper(options: {
     const line = text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").split(/[\r\n]/).map(line => line.trim()).filter(Boolean).at(-1);
     if (line) state.task.activity = line.slice(0, 250);
   };
-  const phase = (message: string) => { state.task.message = message; state.task.percent = null; state.task.lastActivityAt = Date.now(); state.task.activity = ""; };
+  const phase = (message: string) => { state.task.bytesPerSecond = null; state.task.message = message; state.task.percent = null; state.task.lastActivityAt = Date.now(); state.task.activity = ""; };
+
+  // 每个文件单独采样，避免跨文件计数回退；约一秒更新一次实际接收速率。
+  function downloadProgress() {
+    let sampledAt = Date.now();
+    let sampledBytes = 0;
+    state.task.bytesPerSecond = 0;
+    return (received: number, total: number) => {
+      const now = Date.now();
+      const elapsed = now - sampledAt;
+      if (elapsed >= 1000 || (total > 0 && received >= total)) {
+        state.task.bytesPerSecond = (received - sampledBytes) * 1000 / Math.max(1, elapsed);
+        sampledAt = now;
+        sampledBytes = received;
+      }
+      state.task.percent = total ? Math.round(received / total * 100) : null;
+      state.task.lastActivityAt = now;
+    };
+  }
+
+  // 仅删除应用管理的已知目录；解析实际路径，保护通过别名选择的当前模型。
+  async function deleteModel(id: string) {
+    const target = join(root, "models", id);
+    const configured = (await options.getConfig?.())?.modelPath;
+    if (configured) {
+      const current = await realpath(configured).catch(() => resolve(configured));
+      const actual = await realpath(target).catch(() => resolve(target));
+      if (current === actual) throw new Error("请先切换到其他模型，再删除当前模型");
+    }
+    phase(`删除 ${id} 模型`);
+    for (const path of [target, `${target}.download`, `${target}.previous`]) {
+      await rm(path, { recursive: true, force: true });
+    }
+    phase(`${id} 模型已删除`);
+  }
 
   async function refreshComponents() {
     const config = await options.getConfig?.() ?? {pythonPath: await Bun.file(python).exists() ? python : "python3", modelPath: ""};
@@ -147,7 +181,7 @@ export function createManagedWhisper(options: {
     } catch { signal.throwIfAborted(); }
     phase("下载应用专用 uv");
     const archive = join(root, `uv-${asset[0]}`);
-    await downloadVerifiedFile({ url: `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${asset[0]}`, path: archive, sha256: asset[1], signal, onProgress: (n, total) => { state.task.percent = total ? Math.round(n / total * 100) : null; state.task.lastActivityAt = Date.now(); } });
+    await downloadVerifiedFile({ url: `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${asset[0]}`, path: archive, sha256: asset[1], signal, onProgress: downloadProgress() });
     await mkdir(uvDir, { recursive: true });
     // Windows 自带 tar 可读取 zip；其他平台使用 tar.gz，路径均通过参数数组传递。
     await run(["tar", "-xf", archive, "-C", uvDir], signal);
@@ -211,7 +245,7 @@ export function createManagedWhisper(options: {
       if (!file) throw new Error(`模型缺少 ${filename}`);
       phase(`下载 ${id} · ${filename}（${index + 1}/${model.files.length}）`);
       await downloadVerifiedFile({ url: `https://huggingface.co/${model.repo}/resolve/${metadata.sha}/${filename}`, path: join(staging, filename), sha256: file.lfs?.sha256, gitSha1: file.blobId, signal, fetcher: options.fetcher,
-        onProgress: (n, total) => { state.task.percent = total ? Math.round(n / total * 100) : null; state.task.lastActivityAt = Date.now(); },
+        onProgress: downloadProgress(),
       });
     }
     for (const file of model.files.filter(file => file.endsWith(".json"))) JSON.parse(await readFile(join(staging, file), "utf8"));
@@ -263,7 +297,7 @@ export function createManagedWhisper(options: {
     start(request: ManagedWhisperRequest) {
       if (controller) throw new Error("已有安装或下载任务正在进行");
       if ((request.kind === "install" || request.kind === "prepare") && request.source !== undefined && !["pypi", "tuna"].includes(request.source)) throw new Error("未知依赖下载源");
-      if (request.kind !== "install" && (!["model", "prepare"].includes(request.kind) || !fasterWhisperModels.some(model => model.id === request.modelId))) throw new Error("未知模型");
+      if (request.kind !== "install" && (!["model", "prepare", "delete"].includes(request.kind) || !fasterWhisperModels.some(model => model.id === request.modelId))) throw new Error("未知模型");
       controller = new AbortController();
       const signal = controller.signal;
       state.task = { state: "running", message: "准备中", percent: null, log: "", startedAt: Date.now(), lastActivityAt: Date.now(), activity: "" };
@@ -282,6 +316,7 @@ export function createManagedWhisper(options: {
               activate: async () => { await options.saveModel!(modelPath); await refreshComponents(); phase("全部就绪，可以生成字幕"); },
             },signal);
           }
+          else if (request.kind === "delete") await deleteModel(request.modelId);
           else if (request.kind === "install") await install(signal, request.source ?? "pypi");
           else if (!await hasModel(request.modelId)) await downloadModel(request.modelId, signal);
           else phase("模型已下载，点击“使用此模型”切换");
@@ -290,7 +325,7 @@ export function createManagedWhisper(options: {
           state.task.state = signal.aborted ? "cancelled" : "error";
           state.task.message = signal.aborted ? "已取消，可重新开始；已校验的模型文件会复用" : `操作失败：${error instanceof Error ? error.message : String(error)}`;
           log(`\n${state.task.message}`);
-        } finally { controller = null; state.task.percent = null; }
+        } finally { controller = null; state.task.percent = null; state.task.bytesPerSecond = null; }
       })();
     },
     cancel() { controller?.abort(); },

@@ -252,6 +252,8 @@ export const SubtitleMuxPage = ({
   const refreshFfmpegStatus = async () => {
     const status = await desktopApi.getFfmpegStatus();
     setFfmpegStatus(status);
+    // 应用内安装完成后同步实际路径，避免手动配置框仍显示旧值。
+    if (status.available && status.path) setFfmpegPath(status.path);
     return status;
   };
 
