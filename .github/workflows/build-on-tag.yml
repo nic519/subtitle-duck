@@ -126,24 +126,27 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $tarZst = Get-ChildItem artifacts\*-win-x64-subtitle-duck.tar.zst | Select-Object -First 1
           # Electrobun 2 的 npm 包仅提供入口，解压工具随构建产物分发。
-          # Electrobun 2 通常把解压工具放在 npm 包内；保留构建目录回退以兼容不同 runner 缓存布局。
-          $zstd = Get-ChildItem node_modules\electrobun -Recurse -Filter zig-zstd.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $zstd) {
-            $zstd = Get-ChildItem build\stable-win-x64 -Recurse -Filter zig-zstd.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          $tarZst = Get-ChildItem artifacts -Recurse -File -Filter *.tar.zst -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "*win-x64*" } | Select-Object -First 1
+          # Electrobun 2 的工具位置会随 runner 缓存布局变化，递归查找实际产物。
+          $zstd = Get-ChildItem node_modules,build -Recurse -File -Filter zig-zstd.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $tarZst) {
+            Get-ChildItem artifacts -Recurse -Force -ErrorAction SilentlyContinue | Format-Table FullName,Length
+            throw "Windows update tarball not found."
           }
-          if (-not $tarZst) { throw "Windows update tarball not found." }
           if (-not $zstd) { throw "zig-zstd.exe not found." }
 
           New-Item -ItemType Directory -Force portable-work | Out-Null
           & $zstd.FullName decompress -i $tarZst.FullName -o portable-work\subtitle-duck.tar
           tar -xf portable-work\subtitle-duck.tar -C portable-work
 
-          if (-not (Test-Path portable-work\subtitle-duck\bin\launcher.exe)) {
+          $launcher = Get-ChildItem portable-work -Recurse -File -Filter launcher.exe | Select-Object -First 1
+          if (-not $launcher) {
             Get-ChildItem portable-work -Recurse -Force | Format-Table FullName,Length
             throw "Windows launcher.exe not found after extracting build payload."
           }
+          $launcher.Directory.Parent.FullName | Set-Content portable-work\source-dir.txt
 
       - name: Build native Windows installer
         shell: pwsh
@@ -153,12 +156,13 @@ jobs:
           if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
           $version = "${{ github.ref_name }}".TrimStart("v")
           $outputDir = (Resolve-Path artifacts).Path
+          $sourceDir = (Get-Content portable-work\source-dir.txt -Raw).Trim()
           & $iscc `
             "/DAppVersion=$version" `
             "/O$outputDir" `
             "/Fsubtitle-duck_${version}_x64-setup" `
             "/DAppIconFile=$((Resolve-Path assets\app-icon.ico).Path)" `
-            "/DSourceDir=$((Resolve-Path portable-work\subtitle-duck).Path)" `
+            "/DSourceDir=$sourceDir" `
             scripts\windows-installer.iss
 
       - name: Collect Windows release asset
