@@ -1,3 +1,4 @@
+import { fasterWhisperModels, getFasterWhisperDownloadCommand } from "../../subtitle-mux/fasterWhisperModels";
 import type { SubtitleGenerationBatchSnapshot } from "../../subtitle-mux/subtitleGenerationBatch";
 import { SubtitleGenerationBatchList } from "./SubtitleGenerationBatchList";
 import {
@@ -241,7 +242,7 @@ const WorkflowStep = ({
   isLast,
   children,
 }: {
-  workflow?: "translation" | "generation";
+  workflow?: "translation" | "generation" | "merge";
   id: string;
   number: string;
   title: string;
@@ -316,7 +317,7 @@ const InstallCommand = ({ children }: { children: string }) => {
   return (
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2 rounded-[var(--control-radius-sm)] border border-[var(--result-divider)] bg-[var(--result-surface)] px-2.5 py-1.5">
-        <code className="min-w-0 flex-1 select-text whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-foreground">
+        <code className="min-w-0 flex-1 select-text whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-[11px] leading-5 text-foreground">
           {children}
         </code>
         <button
@@ -396,7 +397,12 @@ export const MuxDiagnostics = ({ report }: { report: string | null }) => {
   const [copyStatus, setCopyStatus] = useState("");
   return (
     <details className="subtitle-accent-line border-t pt-3">
-      <summary className="cursor-pointer text-sm text-muted-foreground">命令与日志</summary>
+      <summary className="cursor-pointer text-[length:var(--font-size-caption)] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <Terminal className="size-3.5" aria-hidden="true" />
+          命令与日志
+        </span>
+      </summary>
       <div className="mt-2 grid gap-2">
         <p className="text-xs text-muted-foreground">字幕为可切换轨道，需在播放器中启用。</p>
         {report ? <>
@@ -430,20 +436,20 @@ const DependencyGuide = ({
 }) => (
   <div
     data-subtitle-dependency-guide={title ?? "faster-whisper"}
-    className="grid min-w-0 gap-2 border-l-2 border-[var(--subtitle-accent-border)] pl-3 text-[length:var(--font-size-caption)] text-muted-foreground"
+    className="mt-4 grid min-w-0 gap-3 border-l-2 border-[var(--subtitle-accent-border)] pl-3 text-[length:var(--font-size-caption)] text-muted-foreground"
   >
-    {title ? <div className="font-medium text-foreground">{title}</div> : null}
-    {children}
-    {onRefresh ? (
-      <ToolbarButton
-        darkMode={darkMode}
-        onClick={() => void onRefresh()}
-        className="h-7 justify-self-start bg-transparent px-2 text-[length:var(--font-size-caption)] text-muted-foreground hover:bg-[var(--result-row-hover)] hover:text-foreground"
-      >
-        <RefreshCw className="size-3.5" />
-        重新检测
-      </ToolbarButton>
+    {title ? (
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium text-foreground">{title}</span>
+        {onRefresh ? (
+          <ToolbarIconButton darkMode={darkMode} onClick={() => void onRefresh()}
+            aria-label={`重新检测 ${title.replace("安装 ", "")}`} title="重新检测" className="h-7 w-7 bg-transparent">
+            <RefreshCw className="size-3.5" />
+          </ToolbarIconButton>
+        ) : null}
+      </div>
     ) : null}
+    {children}
   </div>
 );
 
@@ -459,84 +465,69 @@ const FfmpegInstallGuide = ({
     onRefresh={onRefresh}
     darkMode={darkMode}
   >
-    <div className="grid gap-2">
-      <div>macOS（推荐 Homebrew）</div>
-      <InstallCommand>brew install ffmpeg</InstallCommand>
-      <div>Windows（PowerShell）</div>
-      <InstallCommand>winget install --id Gyan.FFmpeg -e</InstallCommand>
-      <div>Linux（Ubuntu / Debian）</div>
-      <InstallCommand>sudo apt update && sudo apt install ffmpeg</InstallCommand>
-      <div>安装验证</div>
-      <InstallCommand>ffmpeg -version</InstallCommand>
+    <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+      {[
+        ["macOS · Homebrew", "brew install ffmpeg"],
+        ["Windows · PowerShell", "winget install --id Gyan.FFmpeg -e"],
+        ["Linux · Ubuntu / Debian", "sudo apt update && sudo apt install ffmpeg"],
+        ["安装验证", "ffmpeg -version"],
+      ].map(([label, command]) => (
+        <div key={label} className="grid min-w-0 content-start gap-2">
+          <span>{label}</span>
+          <InstallCommand>{command}</InstallCommand>
+        </div>
+      ))}
     </div>
   </DependencyGuide>
 );
 
 const FasterWhisperInstallGuide = ({
-  onRefresh,
   darkMode,
   pythonPath,
-  packageMissing,
 }: {
-  onRefresh: () => void | Promise<void>;
   darkMode: boolean;
   pythonPath: string;
-  packageMissing: boolean;
-}) => (
-  <DependencyGuide
-    onRefresh={onRefresh}
-    darkMode={darkMode}
-  >
-    <div className="grid gap-2">
-      {packageMissing ? (
-        <InstallCommand>{`${pythonPath} -m pip install faster-whisper`}</InstallCommand>
-      ) : (
-        <>
-          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-            <div className="grid min-w-0 content-start gap-1">
-              <div>安装 Python 包</div>
-              <InstallCommand>{`${pythonPath} -m pip install --upgrade faster-whisper huggingface_hub`}</InstallCommand>
-            </div>
-            <div className="grid min-w-0 content-start gap-1">
-              <div>下载模型（large-v3）</div>
-              <InstallCommand>huggingface-cli download Systran/faster-whisper-large-v3 --local-dir ~/Models/faster-whisper-large-v3</InstallCommand>
-            </div>
+}) => {
+  const [modelId, setModelId] = useState("large-v3");
+  const model = fasterWhisperModels.find((item) => item.id === modelId)!;
+  return (
+    <DependencyGuide darkMode={darkMode}>
+      <div className="grid min-w-0 items-start gap-x-4 gap-y-4 lg:grid-cols-2">
+        <div className="grid min-w-0 gap-2">
+          <div className="flex h-8 items-center">安装 Python 包</div>
+          <InstallCommand>{`${pythonPath} -m pip install --upgrade faster-whisper huggingface_hub`}</InstallCommand>
+        </div>
+        <div className="grid min-w-0 gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0">下载模型</span>
+            <Select value={modelId} onValueChange={setModelId}>
+              <SelectTrigger aria-label="下载模型" className="h-8 min-w-0 flex-1 text-[length:var(--font-size-caption)]">
+                <span className="truncate">{model.label}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {fasterWhisperModels.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-          <details>
+          <InstallCommand key={model.id}>{getFasterWhisperDownloadCommand(model.repo)}</InstallCommand>
+          <details key={`manual-${model.id}`}>
             <summary className="cursor-pointer py-1">手动下载</summary>
-            <div className="grid gap-2 pt-1">
-          <div>
-            <a
-              href="https://huggingface.co/Systran/faster-whisper-large-v3/tree/main"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-foreground underline underline-offset-4"
-            >
-              large-v3 下载页
-            </a>
-          </div>
-          {/* 本地识别需要完整模型目录，提供配套文件直链，避免只下载权重。 */}
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
-            {["model.bin", "config.json", "preprocessor_config.json", "tokenizer.json", "vocabulary.json"].map((file) => (
-              <a
-                key={file}
-                href={`https://huggingface.co/Systran/faster-whisper-large-v3/resolve/main/${file}?download=true`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-foreground underline underline-offset-4"
-              >
-                {file === "model.bin" ? "model.bin（约 3.09 GB）" : file}
-              </a>
-            ))}
-          </div>
-          <p>将 5 个文件原名保存到同一目录，再选为识别模型。</p>
+            <div className="grid gap-2 pt-2">
+              <a href={`https://huggingface.co/${model.repo}/tree/main`} target="_blank" rel="noopener noreferrer" className="text-foreground underline underline-offset-4">{model.label} 下载页</a>
+              {/* 文件直链随模型切换，不沿用其他模型的体积或路径。 */}
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {model.files.map((file) => (
+                  <a key={file} href={`https://huggingface.co/${model.repo}/resolve/main/${file}?download=true`} target="_blank" rel="noopener noreferrer" className="text-foreground underline underline-offset-4">{file}</a>
+                ))}
+              </div>
+              <p>将以上文件原名保存到同一目录，再选为识别模型。</p>
             </div>
           </details>
-        </>
-      )}
-    </div>
-  </DependencyGuide>
-);
+        </div>
+      </div>
+    </DependencyGuide>
+  );
+};
 
 export const SubtitleMuxPageContent = ({
   darkMode,
@@ -888,10 +879,18 @@ export const SubtitleMuxPageContent = ({
                 className="subtitle-accent-action shrink-0"
                 disabled={!canStart || isMerging || ffmpegUnavailable}
               >
+                <Combine className="size-3.5" aria-hidden="true" />
                 {isMerging ? "正在合并字幕" : "开始合并"}
               </ToolbarButton>
             </div>
-            <MuxDiagnostics report={muxDiagnostics} />
+            <WorkflowStep
+              workflow="merge"
+              id="files"
+              number="01"
+              title="导入文件"
+              state={videoPath && subtitlePath ? "complete" : "current"}
+              isLast={false}
+            >
             <SubtitleMergeDropzone
               darkMode={darkMode}
               videoPath={videoPath}
@@ -909,6 +908,15 @@ export const SubtitleMuxPageContent = ({
               />
             ) : null}
 
+            </WorkflowStep>
+            <WorkflowStep
+              workflow="merge"
+              id="output"
+              number="02"
+              title="合并输出"
+              state={mergeStatusTone === "success" ? "complete" : videoPath && subtitlePath ? "current" : "upcoming"}
+              isLast
+            >
             <div className="flex items-start gap-3 px-3 pt-1">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--subtitle-accent-soft)] text-[var(--subtitle-accent-muted)]">
                 <FolderOpen className="size-4" />
@@ -955,6 +963,8 @@ export const SubtitleMuxPageContent = ({
                 {mergeStatusMessage}
               </StatusMessage>
             ) : null}
+            </WorkflowStep>
+            <MuxDiagnostics report={muxDiagnostics} />
           </div>
         </section>
 
@@ -1049,6 +1059,7 @@ export const SubtitleMuxPageContent = ({
               number="02"
               title="Faster Whisper"
               titleAccessory={
+                <div className="ml-auto flex items-center gap-2">
                 <span
                   data-subtitle-tool-faster-whisper-status={fasterWhisperStatusState}
                   className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] ${
@@ -1072,6 +1083,17 @@ export const SubtitleMuxPageContent = ({
                       ? "不可用"
                       : "检测中"}
                 </span>
+                <ToolbarIconButton
+                  darkMode={darkMode}
+                  onClick={() => void onRefreshFasterWhisperStatus()}
+                  disabled={isGenerating || fasterWhisperStatusState === "checking"}
+                  aria-label="重新检测 Faster Whisper"
+                  title="重新检测"
+                  className="h-7 w-7 bg-transparent"
+                >
+                  <RefreshCw className={`size-3.5 ${fasterWhisperStatusState === "checking" ? "animate-spin" : ""}`} />
+                </ToolbarIconButton>
+                </div>
               }
               state={generationStepStates.settings}
               isLast={hasGenerationBatch}
@@ -1182,16 +1204,15 @@ export const SubtitleMuxPageContent = ({
 
             {fasterWhisperUnavailable ? (
               <FasterWhisperInstallGuide
-                onRefresh={onRefreshFasterWhisperStatus}
                 darkMode={darkMode}
                 pythonPath={fasterWhisperPythonPath?.trim() || "python3"}
-                packageMissing={Boolean(
-                  fasterWhisperStatus?.error?.startsWith(
-                    "所选 Python 未安装 faster-whisper",
-                  ),
-                )}
               />
-            ) : null}
+            ) : (
+              <details className="mt-4 text-[length:var(--font-size-caption)] text-muted-foreground">
+                <summary className="cursor-pointer">下载其他模型</summary>
+                <FasterWhisperInstallGuide darkMode={darkMode} pythonPath={fasterWhisperPythonPath?.trim() || "python3"} />
+              </details>
+            )}
 
             </WorkflowStep>
 
@@ -1566,6 +1587,12 @@ export const SubtitleMuxPageContent = ({
                   <span role="status" className={subtitleTranslationConnectionStatus === "unavailable" ? "text-destructive" : "text-muted-foreground"}>
                     {subtitleTranslationConnectionStatus === "idle" ? "未测试" : subtitleTranslationConnectionStatus === "testing" ? "连接中…" : subtitleTranslationConnectionStatus === "available" ? "连接正常" : "连接失败"}
                   </span>
+                  <ToolbarIconButton darkMode={darkMode}
+                    onClick={() => void onTestSubtitleTranslationConnection()}
+                    disabled={isTranslatingSubtitle || subtitleTranslationConnectionStatus === "testing" || (subtitleTranslationProxyEnabled && !subtitleTranslationProxyUrl.trim())}
+                    aria-label="测试连接" title="测试连接" className="ml-auto h-7 w-7 bg-transparent">
+                    <RefreshCw className={`size-3.5 ${subtitleTranslationConnectionStatus === "testing" ? "animate-spin" : ""}`} />
+                  </ToolbarIconButton>
                 </div>
                 {subtitleTranslationConnectionStatus === "unavailable" && subtitleTranslationConnectionError ? <p className="mt-2 break-words text-destructive">{subtitleTranslationConnectionError}</p> : null}
                 <label className="mt-3 flex items-center gap-2 text-muted-foreground">
@@ -1589,17 +1616,7 @@ export const SubtitleMuxPageContent = ({
                   </label>
                   {subtitleTranslationProxyEnabled && !subtitleTranslationProxyUrl.trim() ? <span className="pb-1 text-muted-foreground/80">请填写代理地址</span> : null}
                 </div>
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => void onTestSubtitleTranslationConnection()}
-                    disabled={isTranslatingSubtitle || subtitleTranslationConnectionStatus === "testing" || (subtitleTranslationProxyEnabled && !subtitleTranslationProxyUrl.trim())}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
-                  >
-                    <RefreshCw className="size-3.5" />
-                    测试连接
-                  </button>
-                </div>
+
               </div>
             </div>
           )}

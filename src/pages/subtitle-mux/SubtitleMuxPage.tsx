@@ -727,7 +727,7 @@ export const SubtitleMuxPage = ({
         videoPath: generationVideoPath,
         ranges: generationRanges,
         durationMs: generationDurationMs,
-        language: "ja",
+        language: "auto",
       });
       if (result.completedRanges.length > 0) {
         void rememberSuccessfulFasterWhisperModel();

@@ -9,6 +9,7 @@ test("批量去重、顺序处理完整视频，失败后继续且再次启动�
     probeDuration: async () => 1000,
     run: async (input) => {
       calls.push(input.videoPath);
+      expect(input.language).toBe("auto");
       expect(input.ranges).toEqual([{ startMs: 0, endMs: 1000 }]);
       if (input.videoPath === "bad.mp4") throw new Error("损坏文件");
       return result(input.videoPath);

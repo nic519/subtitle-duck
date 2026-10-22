@@ -1,68 +1,10 @@
-import { VideoInfo } from "@/components/video-info/VideoInfo";
 import { useState, type DragEventHandler } from "react";
-import { FileVideo, Languages, Plus } from "lucide-react";
-import { ToolbarButton } from "@/components/page-ui";
 import { resolveLocalFileImport } from "@/local-file-import/localFileImport";
+import { FileVideo, Languages, Upload } from "lucide-react";
+import { FilePathPicker } from "@/components/file-path-picker/FilePathPicker";
+import { VideoInfo } from "@/components/video-info/VideoInfo";
 
-const getFileName = (path: string | null) =>
-  path?.split(/[\\/]/).filter(Boolean).at(-1) ?? null;
-
-const SelectedFile = ({
-  kind,
-  path,
-  onChoose,
-  disabled,
-  darkMode,
-}: {
-  kind: "video" | "subtitle";
-  path: string | null;
-  onChoose: () => void | Promise<void>;
-  disabled: boolean;
-  darkMode: boolean;
-}) => {
-  const isVideo = kind === "video";
-  const label = isVideo ? "视频" : "字幕";
-  const fileName = getFileName(path);
-  const Icon = isVideo ? FileVideo : Languages;
-
-  return (
-    <div
-      data-subtitle-merge-file={kind}
-      className="flex min-w-0 items-center gap-3 rounded-[10px] bg-white/[0.025] px-3 py-3 transition-colors hover:bg-white/[0.04]"
-    >
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--subtitle-accent-soft)] text-[var(--subtitle-accent-muted)]">
-        <Icon className="size-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[length:var(--font-size-caption)] text-muted-foreground">
-          {label}
-        </div>
-        {path ? (
-          <div
-            data-subtitle-mux-selected-path={kind}
-            title={path}
-            className="truncate text-[length:var(--font-size-control)] text-foreground"
-          >
-            {fileName}
-          </div>
-        ) : (
-          <div className="text-[length:var(--font-size-control)] text-muted-foreground">
-            等待导入
-          </div>
-        )}
-      </div>
-      <ToolbarButton
-        darkMode={darkMode}
-        onClick={() => void onChoose()}
-        disabled={disabled}
-        className="shrink-0 bg-transparent text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
-      >
-        {path ? "更换" : `选择${label}`}
-      </ToolbarButton>
-    </div>
-  );
-};
-
+// 两个文件区共用已有路径识别逻辑；同时拖入视频和字幕仍会按类型分别填入。
 export const SubtitleMergeDropzone = ({
   darkMode,
   videoPath,
@@ -81,90 +23,73 @@ export const SubtitleMergeDropzone = ({
   onChooseSubtitle: () => void | Promise<void>;
 }) => {
   const [isDragActive, setIsDragActive] = useState(false);
-  const isReady = Boolean(videoPath && subtitlePath);
-
+  // 整块区域接收拖放，捕获阶段统一消费一次，避免内层文件控件重复处理。
   const handleDragOver: DragEventHandler<HTMLDivElement> = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
-    setIsDragActive(true);
+    event.dataTransfer.dropEffect = disabled ? "none" : "copy";
+    if (!disabled) setIsDragActive(true);
   };
-
-  const handleDragLeave: DragEventHandler<HTMLDivElement> = (event) => {
-    event.stopPropagation();
-    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-      setIsDragActive(false);
-    }
-  };
-
   const handleDrop: DragEventHandler<HTMLDivElement> = (event) => {
     event.preventDefault();
     event.stopPropagation();
     setIsDragActive(false);
-    void resolveLocalFileImport(event.dataTransfer).then(onDropPaths);
+    if (!disabled) void resolveLocalFileImport(event.dataTransfer).then(onDropPaths);
   };
-
   return (
-    <div className="grid gap-3" data-subtitle-merge-import="true">
-      <div
-        data-subtitle-merge-dropzone="true"
-        onDragEnter={handleDragOver}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`flex items-center justify-center text-center transition-colors ${
-          isReady
-            ? "min-h-0 gap-2 py-1.5 text-[length:var(--font-size-caption)] text-muted-foreground"
-            : "min-h-[152px] flex-col rounded-[12px] border border-dashed px-6 py-7"
-        } ${
-          isDragActive
-            ? isReady
-              ? "text-[var(--subtitle-accent-muted)]"
-              : "border-[var(--subtitle-accent-border)] bg-[var(--subtitle-accent-soft)]"
-            : isReady
-              ? ""
-              : "border-white/15 bg-white/[0.025]"
-        }`}
-      >
-        {isReady ? (
-          <>
-            <Plus className="size-3.5 text-[var(--subtitle-accent-muted)]" />
-            <span>拖入新文件即可替换</span>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 text-[var(--subtitle-accent-muted)]">
-              <FileVideo className="size-5" />
-              <Plus className="size-3" />
-              <Languages className="size-5" />
-            </div>
-            <div className="mt-3 text-[length:var(--font-size-control)] font-medium text-foreground">
-              拖入视频和字幕
-            </div>
-            <div className="mt-1 text-[length:var(--font-size-caption)] text-muted-foreground">
-              字幕格式：SRT / ASS / SSA
-            </div>
-          </>
-        )}
+  <div className="grid min-w-0 gap-3" data-subtitle-merge-import="true">
+    <div
+      data-subtitle-merge-dropzone="true"
+      onDragEnterCapture={handleDragOver}
+      onDragOverCapture={handleDragOver}
+      onDragLeaveCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragActive(false);
+      }}
+      onDropCapture={handleDrop}
+      className={`grid min-w-0 gap-3 rounded-[10px] border border-dashed p-3 transition-colors ${isDragActive ? "border-[var(--subtitle-accent-border)] bg-[var(--subtitle-accent-soft)]" : "border-white/20 bg-white/[0.02]"}`}
+    >
+      <div className="flex items-center justify-center gap-2 text-[length:var(--font-size-caption)] text-muted-foreground">
+        <Upload className="size-4" />
+        <span>{isDragActive ? "松开以导入" : "同时拖入视频和字幕"}</span>
       </div>
-
-      <div className="grid gap-2">
-        <SelectedFile
-          kind="video"
-          path={videoPath}
-          onChoose={onChooseVideo}
-          disabled={disabled}
-          darkMode={darkMode}
-        />
-        {videoPath ? <div className="px-3 pb-1"><VideoInfo videoPath={videoPath} /></div> : null}
-        <SelectedFile
-          kind="subtitle"
-          path={subtitlePath}
-          onChoose={onChooseSubtitle}
-          disabled={disabled}
-          darkMode={darkMode}
-        />
+      <div className="grid min-w-0 items-start gap-3 md:grid-cols-2 [&_[data-file-path-picker-drop]]:border-0 [&_[data-file-path-picker-drop]]:bg-transparent [&_[data-file-path-picker-drop]]:p-0">
+      <FilePathPicker
+        id="subtitle-merge-video"
+        darkMode={darkMode}
+        label="视频"
+        icon={<FileVideo className="size-4 shrink-0" />}
+        selectedPath={videoPath}
+        selectedPathDataAttribute={{ "data-subtitle-mux-selected-path": "video" }}
+        placeholder="拖入视频，或粘贴路径"
+        dropTitle="拖入视频"
+        chooseLabel="选择视频"
+        disabled={disabled}
+        compact
+        integratedCard
+        onChoose={onChooseVideo}
+        onUsePath={(path) => onDropPaths([path])}
+        onDropPaths={onDropPaths}
+      />
+      <FilePathPicker
+        id="subtitle-merge-subtitle"
+        darkMode={darkMode}
+        label="字幕 · SRT / ASS / SSA"
+        icon={<Languages className="size-4 shrink-0" />}
+        selectedPath={subtitlePath}
+        selectedPathDataAttribute={{ "data-subtitle-mux-selected-path": "subtitle" }}
+        placeholder="拖入字幕，或粘贴路径"
+        dropTitle="拖入字幕"
+        chooseLabel="选择字幕"
+        disabled={disabled}
+        compact
+        integratedCard
+        onChoose={onChooseSubtitle}
+        onUsePath={(path) => onDropPaths([path])}
+        onDropPaths={onDropPaths}
+      />
       </div>
     </div>
+    {videoPath ? <VideoInfo videoPath={videoPath} /> : null}
+  </div>
   );
 };

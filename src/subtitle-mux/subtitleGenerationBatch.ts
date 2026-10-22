@@ -78,7 +78,7 @@ export const createSubtitleGenerationBatch = (adapter: {
             if (!Number.isFinite(durationMs) || durationMs <= 0) throw new Error("无法读取有效视频时长");
             update(item.path, { status: "running", percent: 0, message: "准备生成字幕" });
             transcribing = true;
-            const result = await adapter.run({ videoPath: item.path, durationMs, ranges: [{ startMs: 0, endMs: durationMs }], language: "ja" });
+            const result = await adapter.run({ videoPath: item.path, durationMs, ranges: [{ startMs: 0, endMs: durationMs }], language: "auto" });
             transcribing = false;
             const completed = Boolean(result.outputPath) && !result.stopped && result.failedRanges.length === 0;
             update(item.path, {

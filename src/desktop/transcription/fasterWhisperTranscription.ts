@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--model", required=True)
 parser.add_argument("--audio", required=True)
 parser.add_argument("--output", required=True)
-parser.add_argument("--language", default="ja")
+parser.add_argument("--language", default="auto")
 args = parser.parse_args()
 
 def srt_timestamp(seconds):
@@ -40,7 +40,8 @@ model = WhisperModel(
 segments, _ = model.transcribe(
     args.audio,
     language=None if args.language == "auto" else args.language,
-    task="translate",
+    # 字幕生成只转写原文，翻译由独立的字幕翻译功能处理。
+    task="transcribe",
     beam_size=5,
     vad_filter=True,
     condition_on_previous_text=False,
