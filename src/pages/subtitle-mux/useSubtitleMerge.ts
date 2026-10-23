@@ -169,7 +169,7 @@ export function useSubtitleMerge() {
     setMuxDiagnostics(null);
     setIsMerging(true);
     setProgressMessage("准备调用 ffmpeg");
-    setMergeStatus({ tone: "neutral", message: "正在合并字幕" });
+    setMergeStatus({ tone: "neutral", message: "正在嵌入字幕轨道" });
     try {
       const result = await desktopApi.mergeVideoWithSubtitle({
         videoPath: draft.videoPath,

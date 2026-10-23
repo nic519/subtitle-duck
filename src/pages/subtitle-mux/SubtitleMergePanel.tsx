@@ -77,6 +77,10 @@ export function SubtitleMergePanel({
         className="mx-auto w-full max-w-[900px] min-w-0"
       >
         <div className="grid gap-4">
+          <p className="text-[length:var(--font-size-caption)] leading-relaxed text-muted-foreground">
+            <strong className="font-medium text-foreground">软合并：</strong>
+            将字幕作为独立轨道嵌入 MKV 视频，不烧录到画面中；可在支持的播放器中选择或关闭字幕，音视频无需重编码。
+          </p>
           <div className="flex justify-end gap-2">
             <ToolbarButton
               darkMode={darkMode}
@@ -93,7 +97,7 @@ export function SubtitleMergePanel({
               disabled={!canStart || isMerging || ffmpegUnavailable}
             >
               <Combine className="size-3.5" aria-hidden="true" />
-              {isMerging ? "正在合并字幕" : "开始合并"}
+              {isMerging ? "正在软合并" : "开始软合并"}
             </ToolbarButton>
           </div>
           <WorkflowStep
@@ -125,7 +129,7 @@ export function SubtitleMergePanel({
             workflow="merge"
             id="output"
             number="02"
-            title={mergeStatusTone === "success" ? "合并完成" : "合并输出"}
+            title={mergeStatusTone === "success" ? "软合并完成" : "软合并输出"}
             state={
               mergeStatusTone === "success"
                 ? "complete"
