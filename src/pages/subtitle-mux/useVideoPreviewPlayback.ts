@@ -35,6 +35,8 @@ export const useVideoPreviewPlayback = (
   return {
     videoRef,
     ...snapshot,
+    // Remove the native src during render, before the effect attaches a blob URL.
+    sourceUrl: source?.adapter === "native" ? source.url : undefined,
     seek: (timeMs: number) => sessionRef.current!.seek(timeMs),
     toggle: () => sessionRef.current!.toggle(),
     reportTime: (currentTimeSeconds: number) =>

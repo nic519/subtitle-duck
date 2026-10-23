@@ -434,6 +434,15 @@ export function SubtitleGenerationPanel({
                       onPause={() => previewPlayback.reportPlaying(false)}
                       onEnded={() => previewPlayback.reportPlaying(false)}
                       onError={previewPlayback.reportNativeError}
+                      onLoadedData={(event) => {
+                        // Some containers load audio even when their video codec is unsupported.
+                        if (
+                          generationVideoPreview.adapter === "native" &&
+                          event.currentTarget.videoWidth === 0
+                        ) {
+                          previewPlayback.reportNativeError();
+                        }
+                      }}
                     />
                   ) : !isGenerating && generationVideoPath ? (
                     <div className="rounded-[8px] bg-[var(--result-surface)] px-3 py-4 text-[length:var(--font-size-caption)] text-muted-foreground">

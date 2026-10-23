@@ -4,6 +4,7 @@ import type { VideoPreviewSource } from "./videoPreviewSession";
 export type VideoPreviewElement = {
   currentTime: number;
   paused: boolean;
+  buffered?: Pick<TimeRanges, "length" | "start" | "end">;
   play: () => Promise<unknown>;
   pause: () => void;
 };
@@ -39,6 +40,7 @@ export const createVideoPreviewPlaybackSession = (
   let video: VideoPreviewElement | null = null;
   let sourceOffsetMs = 0;
   let autoplay = false;
+  let seekTimer: ReturnType<typeof setTimeout> | null = null;
   let detachStream: (() => void) | null = null;
   let snapshot = initialSnapshot();
   const listeners = new Set<(value: VideoPreviewPlaybackSnapshot) => void>();
@@ -46,6 +48,11 @@ export const createVideoPreviewPlaybackSession = (
   const publish = (next: VideoPreviewPlaybackSnapshot) => {
     snapshot = next;
     listeners.forEach((listener) => listener(snapshot));
+  };
+
+  const cancelPendingSeek = () => {
+    if (seekTimer !== null) clearTimeout(seekTimer);
+    seekTimer = null;
   };
 
   const stopStream = () => {
@@ -82,6 +89,7 @@ export const createVideoPreviewPlaybackSession = (
       };
     },
     setSource(nextSource: VideoPreviewSource | null) {
+      cancelPendingSeek();
       source = nextSource;
       sourceOffsetMs = 0;
       autoplay = false;
@@ -96,15 +104,37 @@ export const createVideoPreviewPlaybackSession = (
       attachCurrentStream();
     },
     detach() {
+      cancelPendingSeek();
       stopStream();
       video = null;
     },
     seek(timeMs: number) {
       if (!video || !source) return;
       if (source.adapter === "ffmpeg-stream") {
-        sourceOffsetMs = timeMs;
-        autoplay = !video.paused;
-        attachCurrentStream();
+        cancelPendingSeek();
+        const relativeSeconds = (timeMs - sourceOffsetMs) / 1000;
+        const buffered = video.buffered;
+        let canSeekInBuffer = false;
+        for (let index = 0; buffered && index < buffered.length; index++) {
+          if (
+            relativeSeconds >= buffered.start(index) &&
+            relativeSeconds < buffered.end(index)
+          ) {
+            canSeekInBuffer = true;
+            break;
+          }
+        }
+        if (canSeekInBuffer) {
+          video.currentTime = relativeSeconds;
+        } else {
+          // Update the playhead immediately, but only restart after scrubbing settles.
+          seekTimer = setTimeout(() => {
+            seekTimer = null;
+            autoplay = video !== null && !video.paused;
+            sourceOffsetMs = timeMs;
+            attachCurrentStream();
+          }, 120);
+        }
       } else {
         video.currentTime = timeMs / 1000;
       }
@@ -116,6 +146,7 @@ export const createVideoPreviewPlaybackSession = (
       else video.pause();
     },
     reportTime(currentTimeSeconds: number) {
+      if (seekTimer !== null) return;
       publish({
         ...snapshot,
         playheadMs: sourceOffsetMs + Math.round(currentTimeSeconds * 1000),
@@ -125,6 +156,18 @@ export const createVideoPreviewPlaybackSession = (
       publish({ ...snapshot, isPlaying });
     },
     reportNativeError() {
+      const failedSource = source;
+      if (failedSource?.adapter === "native" && failedSource.requestFallback) {
+        void failedSource.requestFallback().catch((error) => {
+          if (source !== failedSource) return;
+          publish({
+            ...snapshot,
+            isUnavailable: true,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+        return;
+      }
       publish({ ...snapshot, isUnavailable: true });
     },
   };

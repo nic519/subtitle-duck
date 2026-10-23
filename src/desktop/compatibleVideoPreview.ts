@@ -158,6 +158,11 @@ export const buildStreamingCompatibleVideoPreviewCommand = ({
   "mp4",
   "-movflags",
   "frag_keyframe+empty_moov+default_base_moof",
+  // Flush short fragments so a seek does not wait for the next full GOP.
+  "-frag_duration",
+  "100000",
+  "-flush_packets",
+  "1",
   "pipe:1",
 ];
 

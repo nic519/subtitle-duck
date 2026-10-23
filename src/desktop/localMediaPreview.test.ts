@@ -12,6 +12,7 @@ describe("local media preview streaming", () => {
           stdout: new Blob(["fragment"]).stream(),
           stderr: new Blob([]).stream(),
           exited: new Promise<number>(() => undefined),
+          kill: () => {},
         } as ReturnType<typeof Bun.spawn>;
       },
     });
@@ -31,4 +32,26 @@ describe("local media preview streaming", () => {
       server.stop();
     }
   });
+});
+
+test("stops transcoding when the preview request is aborted", async () => {
+  let killed = false;
+  const server = createLocalMediaPreviewServer({
+    existsSync: () => true,
+    spawn: () => ({
+      stdout: new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1])); } }),
+      exited: new Promise<number>(() => {}),
+      kill: () => { killed = true; },
+    }) as ReturnType<typeof Bun.spawn>,
+  });
+  try {
+    const url = server.getStreamingPreviewUrl({filePath: "/video.mkv", ffmpegPath: "ffmpeg"});
+    const controller = new AbortController();
+    const response = await fetch(url, {signal: controller.signal});
+    const reader = response.body!.getReader();
+    await reader.read();
+    controller.abort();
+    for (let attempt = 0; attempt < 20 && !killed; attempt++) await Bun.sleep(10);
+    expect(killed).toBe(true);
+  } finally { server.stop(); }
 });

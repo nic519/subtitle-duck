@@ -128,7 +128,7 @@ export const SubtitleGenerationTimeline = ({
                 aria-label={`选择片段 ${index + 1}`}
                 onClick={() => onSelectSegment(segment.id)}
                 disabled={disabled}
-                className={`absolute inset-y-0 z-20 rounded-[3px] transition-opacity ${
+                className={`absolute inset-y-0 z-0 rounded-[3px] transition-opacity ${
                   segment.id === activeSegmentId
                     ? "opacity-100 ring-1 ring-white/90"
                     : "opacity-75 hover:opacity-100"
@@ -145,7 +145,19 @@ export const SubtitleGenerationTimeline = ({
           max={safeDurationMs}
           step={100}
           value={Math.min(safeDurationMs, Math.max(0, playheadMs))}
-          onChange={(event) => onSeek(Number(event.target.value))}
+          onChange={(event) => {
+            const timeMs = Number(event.target.value);
+            // Keep the slider above range fills so they cannot intercept scrubbing.
+            const segment = sortedSegments.find(
+              (candidate) =>
+                !candidate.initial &&
+                candidate.endMs !== null &&
+                timeMs >= candidate.startMs &&
+                timeMs < candidate.endMs,
+            );
+            if (segment) onSelectSegment(segment.id);
+            onSeek(timeMs);
+          }}
           disabled={controlDisabled}
           className="subtitle-range-slider absolute inset-x-0 top-0 z-10 h-[34px] appearance-none bg-transparent disabled:opacity-40"
         />

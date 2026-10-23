@@ -76,6 +76,7 @@ export const createLocalMediaPreviewServer = (
   const checkExists = deps.existsSync ?? existsSync;
   const spawn = deps.spawn ?? Bun.spawn;
   const entries = new Map<string, MediaPreviewEntry | StreamingPreviewEntry>();
+  const activeProcesses = new Set<ReturnType<typeof Bun.spawn>>();
   let server: BunServer | null = null;
 
   const ensureServer = () => {
@@ -107,6 +108,16 @@ export const createLocalMediaPreviewServer = (
             }),
             { stdout: "pipe", stderr: "ignore" },
           );
+          activeProcesses.add(process);
+          const stopProcess = () => {
+            if (activeProcesses.delete(process)) process.kill();
+          };
+          request.signal.addEventListener("abort", stopProcess, { once: true });
+          if (request.signal.aborted) stopProcess();
+          void process.exited.finally(() => {
+            activeProcesses.delete(process);
+            request.signal.removeEventListener("abort", stopProcess);
+          });
           return new Response(process.stdout, {
             headers: {
               "Access-Control-Allow-Origin": "*",
@@ -188,6 +199,8 @@ export const createLocalMediaPreviewServer = (
       return `http://127.0.0.1:${activeServer.port}/stream/${id}/${encodeURIComponent(fileName)}`;
     },
     stop() {
+      for (const process of activeProcesses) process.kill();
+      activeProcesses.clear();
       server?.stop(true);
       server = null;
       entries.clear();

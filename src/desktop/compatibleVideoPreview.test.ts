@@ -57,5 +57,7 @@ describe("compatible video preview commands", () => {
     expect(command).not.toContain("nokey");
     expect(command).toContain("-re");
     expect(command).toContain("baseline");
+    expect(command).toContain("-frag_duration");
+    expect(command).toContain("100000");
   });
 });

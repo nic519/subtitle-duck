@@ -1,6 +1,7 @@
 export type VideoPreviewSource = {
   adapter: "native" | "ffmpeg-stream";
   url: string;
+  requestFallback?: () => Promise<void>;
 };
 
 export type VideoPreviewSnapshot = {
@@ -62,27 +63,36 @@ export const createVideoPreviewSession = (adapter: VideoPreviewAdapter) => {
           adapter.getNativeSource(normalizedPath),
         ]);
         if (loadIdentity !== identity) return snapshot;
+        let fallback: Promise<void> | null = null;
+        const requestFallback = (): Promise<void> => {
+          if (loadIdentity !== identity) return Promise.resolve();
+          if (fallback) return fallback;
+          fallback = (async () => {
+            try {
+              const streamUrl = await adapter.getStreamSource(normalizedPath);
+              if (loadIdentity !== identity) return;
+              publish({
+                ...snapshot,
+                source: { adapter: "ffmpeg-stream", url: streamUrl },
+              });
+            } catch (error) {
+              if (loadIdentity !== identity) return;
+              publish({
+                ...snapshot,
+                error: error instanceof Error ? error.message : String(error),
+              });
+              throw error;
+            }
+          })();
+          return fallback;
+        };
         publish({
           status: "ready",
           videoPath: normalizedPath,
           durationMs,
-          source: { adapter: "native", url: nativeUrl },
+          source: { adapter: "native", url: nativeUrl, requestFallback },
           error: null,
         });
-        try {
-          const streamUrl = await adapter.getStreamSource(normalizedPath);
-          if (loadIdentity !== identity) return snapshot;
-          publish({
-            ...snapshot,
-            source: { adapter: "ffmpeg-stream", url: streamUrl },
-          });
-        } catch (error) {
-          if (loadIdentity !== identity) return snapshot;
-          publish({
-            ...snapshot,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
         return snapshot;
       } catch (error) {
         if (loadIdentity !== identity) return snapshot;
