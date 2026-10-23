@@ -4,7 +4,7 @@ import { probeWhisperReadiness } from "./transcription/whisperReadiness";
 import { join } from "node:path";
 import { createManagedWhisper } from "./transcription/managedWhisper";
 import { probeVideoMetadata } from "./videoMetadata";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import Electrobun, { ApplicationMenu, BrowserView, BrowserWindow, Utils } from "electrobun/bun";
 import { configGet, configSet } from "./configStore";
 import {
@@ -290,6 +290,9 @@ Electrobun.events.on(`new-window-open-${mainWindow.webview.id}`, (event: { data:
 });
 if (Bun.env.SUBTITLE_DUCK_VERIFY_LOCAL_APP === "1") {
   console.log("[subtitle-duck] BrowserWindow created");
+  if (Bun.env.SUBTITLE_DUCK_VERIFY_READY_FILE) {
+    writeFileSync(Bun.env.SUBTITLE_DUCK_VERIFY_READY_FILE, "BrowserWindow created\n");
+  }
 }
 
 process.once("exit", () => {

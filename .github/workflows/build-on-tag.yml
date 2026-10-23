@@ -123,27 +123,7 @@ jobs:
         run: bun run package
 
       - name: Prepare Windows installer payload
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          New-Item -ItemType Directory -Force portable-work | Out-Null
-          $launcher = Get-ChildItem build\stable-win-x64 -Recurse -File -Filter launcher.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $launcher) {
-            # 兼容旧版 Electrobun：只有构建目录没有 launcher 时才解压更新包。
-            $tarZst = Get-ChildItem artifacts -Recurse -File -Filter *.tar.zst -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -like "*win-x64*" } | Select-Object -First 1
-            $zstd = Get-ChildItem node_modules,build -Recurse -File -Filter zig-zstd.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-            if (-not $tarZst) { throw "Windows update tarball not found." }
-            if (-not $zstd) { throw "zig-zstd.exe not found." }
-            & $zstd.FullName decompress -i $tarZst.FullName -o portable-work\subtitle-duck.tar
-            tar -xf portable-work\subtitle-duck.tar -C portable-work
-            $launcher = Get-ChildItem portable-work -Recurse -File -Filter launcher.exe | Select-Object -First 1
-          }
-          if (-not $launcher) {
-            Get-ChildItem build,portable-work -Recurse -Force -ErrorAction SilentlyContinue | Format-Table FullName,Length
-            throw "Windows launcher.exe not found in build or update payload."
-          }
-          $launcher.Directory.Parent.FullName | Set-Content portable-work\source-dir.txt
+        run: bun scripts/prepare-windows-payload.ts
 
       - name: Build native Windows installer
         shell: pwsh
@@ -151,7 +131,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
-          $version = "${{ github.ref_name }}".TrimStart("v")
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $outputDir = (Resolve-Path artifacts).Path
           $sourceDir = (Get-Content portable-work\source-dir.txt -Raw).Trim()
           & $iscc `
@@ -161,6 +141,7 @@ jobs:
             "/DAppIconFile=$((Resolve-Path assets\app-icon.ico).Path)" `
             "/DSourceDir=$sourceDir" `
             scripts\windows-installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
 
       - name: Collect Windows release asset
         shell: pwsh
@@ -174,15 +155,6 @@ jobs:
           }
           Copy-Item $installer.FullName release-assets\
           Get-ChildItem release-assets -Force | Format-Table Name,Length
-
-      - name: Upload Windows asset to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          draft: true
-          files: release-assets/*
-          fail_on_unmatched_files: true
 
       - name: Smoke test native installer
         shell: pwsh
@@ -202,15 +174,47 @@ jobs:
             throw "Windows installer smoke install failed with exit code $($installProcess.ExitCode)."
           }
 
-          $launcher = Get-ChildItem $installDir -Recurse -Filter launcher.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $launcher) { throw "Installed launcher.exe was not found under $installDir." }
+          $launcher = Join-Path $installDir "bin\launcher.exe"
+          if (-not (Test-Path $launcher)) { throw "Installed launcher.exe was not found under $installDir." }
+          $readyFile = Join-Path $env:RUNNER_TEMP "subtitle-duck-smoke-ready.txt"
+          Remove-Item $readyFile -Force -ErrorAction SilentlyContinue
+          $env:SUBTITLE_DUCK_VERIFY_LOCAL_APP = "1"
+          $env:SUBTITLE_DUCK_VERIFY_READY_FILE = $readyFile
+          $app = Start-Process -FilePath $launcher -WorkingDirectory (Split-Path $launcher) -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(45)
+            while (-not (Test-Path $readyFile) -and (Get-Date) -lt $deadline) {
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not (Test-Path $readyFile)) { throw "Installed app did not reach BrowserWindow creation within 45 seconds." }
+            if ((Get-Content $readyFile -Raw).Trim() -ne "BrowserWindow created") { throw "Invalid app readiness signal." }
+          } finally {
+            taskkill /PID $app.Id /T /F 2>$null | Out-Null
+            # The launcher may hand off to a detached runtime. Clean up only this installation.
+            Get-CimInstance Win32_Process | Where-Object {
+              $_.ExecutablePath -and $_.ExecutablePath.StartsWith($installDir + "\", [System.StringComparison]::OrdinalIgnoreCase)
+            } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            Remove-Item Env:SUBTITLE_DUCK_VERIFY_LOCAL_APP,Env:SUBTITLE_DUCK_VERIFY_READY_FILE
+          }
+          $global:LASTEXITCODE = 0
+
+      - name: Upload Windows asset to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: release-assets/*
+          fail_on_unmatched_files: true
 
       - name: Upload Windows smoke-test logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: subtitle-duck-Windows-Smoke-Logs
-          path: installer-smoke.log
+          path: |
+            installer-smoke.log
+            ~/AppData/Local/com.subtitleduck.app/stable/logs/**
           if-no-files-found: ignore
           retention-days: 1
 
