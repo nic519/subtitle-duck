@@ -46,6 +46,8 @@ export const buildSubtitleMuxCommand = (
   "-map",
   "0",
   "-map",
+  "-0:disp:attached_pic?",
+  "-map",
   "1:0",
   "-c",
   "copy",

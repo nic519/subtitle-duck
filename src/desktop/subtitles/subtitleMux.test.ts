@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { mergeVideoWithSubtitle, type SubtitleMuxProgress } from "./subtitleMux";
+import { buildSubtitleMuxCommand, mergeVideoWithSubtitle, type SubtitleMuxProgress } from "./subtitleMux";
+
+test("封装时排除封面图片流，保留源媒体和新增字幕", () => {
+  const command = buildSubtitleMuxCommand({
+    videoPath: "source.mp4",
+    subtitlePath: "source.srt",
+    outputPath: "merged.mkv",
+  });
+  const mappings = command.flatMap((arg, index) => arg === "-map" ? [command[index + 1]] : []);
+  expect(mappings).toEqual(["0", "-0:disp:attached_pic?", "1:0"]);
+});
 
 for (const exitCode of [0, 1]) {
   test(`保留真实参数、日志和退出码（${exitCode}）`, async () => {
