@@ -49,9 +49,15 @@ const hasSupportedExtension = (
   extensions: Set<string>
 ): boolean => extensions.has(getPathParts(filePath).extension);
 
-export const buildSubtitleMuxOutputPath = (videoPath: string): string => {
-  const { directory, separator, baseName } = getPathParts(videoPath);
-  return `${directory}${separator}${baseName}.muxed.mkv`;
+export const buildSubtitleMuxOutputPath = (
+  videoPath: string,
+  subtitlePath?: string | null,
+): string => {
+  const { directory, separator, baseName, extension } = getPathParts(videoPath);
+  // 未选择字幕时先沿用 MP4；选入 ASS/SSA 后切换为可保留样式的 MKV。
+  const keepMp4 = extension === ".mp4" &&
+    (!subtitlePath || getPathParts(subtitlePath).extension === ".srt");
+  return `${directory}${separator}${baseName}.muxed.${keepMp4 ? "mp4" : "mkv"}`;
 };
 
 const getSubtitleMuxPathGroups = (rawPaths: string[]) => {
@@ -95,7 +101,7 @@ export const classifySubtitleMuxDropPaths = (
   } = getSubtitleMuxPathGroups(rawPaths);
   const videoPath = videoPaths[0] ?? null;
   const subtitlePath = subtitlePaths[0] ?? null;
-  const outputPath = videoPath ? buildSubtitleMuxOutputPath(videoPath) : null;
+  const outputPath = videoPath ? buildSubtitleMuxOutputPath(videoPath, subtitlePath) : null;
 
   if (unsupportedSubtitlePath) {
     return {
@@ -146,7 +152,7 @@ export const mergeSubtitleMuxDraftWithDropPaths = (
 
   const videoPath = videoPaths[0] ?? current.videoPath;
   const subtitlePath = subtitlePaths[0] ?? current.subtitlePath;
-  const outputPath = videoPath ? buildSubtitleMuxOutputPath(videoPath) : null;
+  const outputPath = videoPath ? buildSubtitleMuxOutputPath(videoPath, subtitlePath) : null;
 
   if (paths.length === 0) {
     return {

@@ -79,7 +79,7 @@ export function SubtitleMergePanel({
         <div className="grid gap-4">
           <p className="text-[length:var(--font-size-caption)] leading-relaxed text-muted-foreground">
             <strong className="font-medium text-foreground">软合并：</strong>
-            将字幕作为独立轨道嵌入 MKV 视频，不烧录到画面中；可在支持的播放器中选择或关闭字幕，音视频无需重编码。
+            将字幕作为独立轨道嵌入视频；MP4＋SRT 默认保留 MP4，其他组合输出 MKV。音视频无需重编码，可在支持的播放器中选择或关闭字幕。
           </p>
           <div className="flex justify-end gap-2">
             <ToolbarButton

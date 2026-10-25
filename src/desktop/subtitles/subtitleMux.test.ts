@@ -54,3 +54,19 @@ test("启动失败时仍可回查命令", async () => {
   expect(events.at(-1)?.diagnostics).toContain("missing-ffmpeg");
   expect(events.at(-1)?.diagnostics).toContain("启动失败");
 });
+
+
+test("MP4 output converts subtitles to mov_text and enables faststart without re-encoding AV", () => {
+  const command = buildSubtitleMuxCommand({ videoPath: "source.mp4", subtitlePath: "source.srt", outputPath: "merged.MP4" });
+  expect(command.slice(-5)).toEqual(["-c:s", "mov_text", "-movflags", "+faststart", "merged.MP4"]);
+  expect(command.slice(command.indexOf("-c"), command.indexOf("-c") + 2)).toEqual(["-c", "copy"]);
+  expect(command).not.toContain("-r");
+  expect(command).not.toContain("-vf");
+});
+
+test("MKV output preserves styled subtitle streams", () => {
+  const command = buildSubtitleMuxCommand({ videoPath: "source.mp4", subtitlePath: "styled.ass", outputPath: "merged.mkv" });
+  expect(command.slice(-3)).toEqual(["-c", "copy", "merged.mkv"]);
+  expect(command).not.toContain("mov_text");
+  expect(command).not.toContain("-movflags");
+});

@@ -51,6 +51,10 @@ export const buildSubtitleMuxCommand = (
   "1:0",
   "-c",
   "copy",
+  // MP4 使用 mov_text 字幕；视频、音频及其他流仍直接复制。
+  ...(/\.mp4$/i.test(outputPath)
+    ? ["-c:s", "mov_text", "-movflags", "+faststart"]
+    : []),
   outputPath,
 ];
 
