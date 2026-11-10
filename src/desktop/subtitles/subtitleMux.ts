@@ -70,6 +70,20 @@ const formatProgressTime = (milliseconds: number): string => {
     .join(":");
 };
 
+const formatRemainingTime = (milliseconds: number): string => {
+  if (milliseconds < 1000) return "预计剩余不足 1 秒";
+  const seconds = Math.ceil(milliseconds / 1000);
+  if (seconds < 60) return `预计剩余约 ${seconds} 秒`;
+  if (seconds < 3600) {
+    const remainder = seconds % 60;
+    return `预计剩余约 ${Math.floor(seconds / 60)} 分${remainder ? ` ${remainder} 秒` : ""}`;
+  }
+  // 较长估算保留到分钟，避免给出过于精确的秒数。
+  const minutes = Math.ceil(seconds / 60);
+  const remainder = minutes % 60;
+  return `预计剩余约 ${Math.floor(minutes / 60)} 小时${remainder ? ` ${remainder} 分` : ""}`;
+};
+
 export const parseFfmpegProgressText = (
   text: string,
   totalDurationMs?: number,
@@ -96,6 +110,12 @@ export const parseFfmpegProgressText = (
 
   const outTimeLabel = formatProgressTime(outTimeMs);
   const speed = entries.get("speed") || undefined;
+  const speedMultiplier = speed && /^(?:\d+(?:\.\d*)?|\.\d+)x$/.test(speed.trim())
+    ? Number(speed.trim().slice(0, -1)) : 0;
+  const remainingMs = durationMs && outTimeMs > 0 && speedMultiplier > 0
+    ? (durationMs - outTimeMs) / speedMultiplier : undefined;
+  const remainingLabel = remainingMs !== undefined && Number.isFinite(remainingMs) && remainingMs > 0
+    ? formatRemainingTime(remainingMs) : "正在估算剩余时间";
   return {
     phase: "running",
     outTimeMs,
@@ -104,7 +124,9 @@ export const parseFfmpegProgressText = (
     durationMs,
     percent: durationMs ? Math.min(99, Math.floor(outTimeMs / durationMs * 100)) : undefined,
     message: durationMs
-      ? `已处理 ${outTimeLabel} / ${formatProgressTime(durationMs)}`
+      ? outTimeMs >= durationMs
+        ? "正在完成封装，请稍候"
+        : `已处理 ${outTimeLabel} / ${formatProgressTime(durationMs)} · ${remainingLabel}`
       : `已处理 ${outTimeLabel}，视频总时长未知`,
   };
 };

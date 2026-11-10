@@ -7,7 +7,28 @@ import { buildSubtitleMuxCommand, mergeVideoWithSubtitle, parseFfmpegProgressTex
 test("按视频总时长报告进度，不再以速度倍率作为反馈", () => {
   const progress = parseFfmpegProgressText("out_time_us=30000000\nspeed=42x\nprogress=continue\n", 60_000);
   expect(progress?.percent).toBe(50);
-  expect(progress?.message).toBe("已处理 00:00:30 / 00:01:00");
+  expect(progress?.message).toBe("已处理 00:00:30 / 00:01:00 · 预计剩余不足 1 秒");
+});
+
+test("根据实际处理速度估算剩余时间，并随速度变化更新", () => {
+  const parse = (speed: string) => parseFfmpegProgressText(`out_time_us=30000000\nspeed=${speed}\nprogress=continue`, 190_000);
+  expect(parse("2x")?.message).toContain("预计剩余约 1 分 20 秒");
+  expect(parse("4x")?.message).toContain("预计剩余约 40 秒");
+  expect(parse("0.02x")?.message).toContain("预计剩余约 2 小时 14 分");
+});
+
+test("速度尚不可用时提示正在估算，不展示无效的剩余时间", () => {
+  for (const speed of ["N/A", "0x", "-2x", "Infinityx", "2broken", ""]) {
+    const progress = parseFfmpegProgressText(`out_time_us=30000000\nspeed=${speed}\nprogress=continue`, 60_000);
+    expect(progress?.message).toContain("正在估算剩余时间");
+    expect(progress?.message).not.toMatch(/NaN|Infinity|预计剩余约 0/);
+  }
+  expect(parseFfmpegProgressText("out_time_us=0\nspeed=2x\nprogress=continue", 60_000)?.message).toContain("正在估算剩余时间");
+});
+
+test("复制已到末尾与封装阶段均不展示零秒倒计时", () => {
+  expect(parseFfmpegProgressText("out_time_us=70000000\nspeed=2x\nprogress=continue", 60_000)?.message).toContain("正在完成封装");
+  expect(parseFfmpegProgressText("out_time_us=60000000\nspeed=2x\nprogress=end", 60_000)?.message).not.toContain("预计剩余");
 });
 
 test("接受零进度；时长未知时不编造百分比", () => {
