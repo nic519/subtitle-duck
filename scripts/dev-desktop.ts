@@ -24,14 +24,15 @@ const waitForRenderer = async () => {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(DEV_SERVER_URL);
+      // HTML 可用并不代表 React 入口能编译；成功后再启动桌面窗口。
+      const response = await fetch(new URL("/src/main.tsx", DEV_SERVER_URL));
       if (response.ok) return;
     } catch {
       // Vite is still starting.
     }
     await Bun.sleep(100);
   }
-  throw new Error("Vite 开发服务器未能在 20 秒内启动");
+  throw new Error("Vite 开发服务器未能在 20 秒内编译渲染入口，请检查上方错误");
 };
 
 let desktop: ReturnType<typeof Bun.spawn> | null = null;

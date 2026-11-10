@@ -1,5 +1,67 @@
 import { expect, test } from "bun:test";
-import { buildSubtitleMuxCommand, mergeVideoWithSubtitle, type SubtitleMuxProgress } from "./subtitleMux";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildSubtitleMuxCommand, mergeVideoWithSubtitle, parseFfmpegProgressText, type SubtitleMuxProgress } from "./subtitleMux";
+
+test("按视频总时长报告进度，不再以速度倍率作为反馈", () => {
+  const progress = parseFfmpegProgressText("out_time_us=30000000\nspeed=42x\nprogress=continue\n", 60_000);
+  expect(progress?.percent).toBe(50);
+  expect(progress?.message).toBe("已处理 00:00:30 / 00:01:00");
+});
+
+test("接受零进度；时长未知时不编造百分比", () => {
+  expect(parseFfmpegProgressText("out_time_ms=0\nprogress=continue", 60_000)?.percent).toBe(0);
+  const unknown = parseFfmpegProgressText("out_time_ms=30000000\nspeed=42x\nprogress=continue");
+  expect(unknown?.percent).toBeUndefined();
+  expect(unknown?.message).toBe("已处理 00:00:30，视频总时长未知");
+  expect(parseFfmpegProgressText("out_time_us=N/A\nprogress=continue", 60_000)).toBeNull();
+});
+
+test("输出结束标记只表示正在完成封装，不提前宣告成功", () => {
+  const progress = parseFfmpegProgressText("out_time_us=70000000\nprogress=end", 60_000);
+  expect(progress?.phase).toBe("finalizing");
+  expect(progress?.percent).toBe(99);
+  expect(progress?.message).toContain("正在完成封装");
+  expect(parseFfmpegProgressText("out_time_us=-1000\nprogress=continue", 60_000)?.percent).toBe(0);
+});
+
+for (const exitCode of [0, 1]) {
+  test(`流式读取源视频时长并等待真实退出后报告结果（${exitCode}）`, async () => {
+    const events: SubtitleMuxProgress[] = [];
+    const script = `
+      process.stderr.write("Input #0, mov, from 'input.mp4':\\n  Dura");
+      await Bun.sleep(15);
+      process.stderr.write("tion: 00:01:00.00, start: 0.000000\\nInput #1, srt, from 'input.srt':\\n  Duration: 00:10:00.00\\n");
+      await Bun.sleep(15);
+      console.log("out_time_us=30000000\\nspeed=42x\\nprogress=continue");
+      await Bun.sleep(15);
+      console.error("[mp4] Starting second pass: moving the moov atom to the beginning of the file");
+      await Bun.sleep(15);
+      console.log("out_time_us=30000000\\nprogress=continue");
+      await Bun.sleep(15);
+      console.log("out_time_us=60000000\\nprogress=end");
+      await Bun.sleep(15);
+      process.exit(${exitCode});
+    `;
+    const task = mergeVideoWithSubtitle({ videoPath: "input.mp4", subtitlePath: "input.srt", outputPath: "output.mkv" }, {
+      existsSync: (path) => path !== "output.mkv",
+      onProgress: event => events.push(event),
+      spawn: (_, options) => Bun.spawn([process.execPath, "-e", script], options),
+    });
+    if (exitCode === 0) await task;
+    else await expect(task).rejects.toThrow();
+    expect(events.find(event => event.phase === "running")?.percent).toBe(50);
+    expect(events.find(event => event.phase === "running")?.durationMs).toBe(60_000);
+    expect(events.find(event => event.phase === "finalizing")?.message).toBe("正在整理 MP4 文件，请稍候");
+    const finalizingIndex = events.findIndex(event => event.phase === "finalizing");
+    expect(events.slice(finalizingIndex).some(event => event.phase === "running")).toBe(false);
+    expect(events.at(-1)?.phase).toBe(exitCode === 0 ? "completed" : "failed");
+    expect(events.filter(event => event.phase === "completed")).toHaveLength(exitCode === 0 ? 1 : 0);
+    if (exitCode === 0) expect(events.at(-1)?.percent).toBe(100);
+    expect(events.findLast(event => event.diagnostics)?.diagnostics).toContain("Duration: 00:01:00.00");
+  });
+}
 
 test("封装时排除封面图片流，保留源媒体和新增字幕", () => {
   const command = buildSubtitleMuxCommand({
@@ -33,7 +95,7 @@ for (const exitCode of [0, 1]) {
     if (exitCode === 0) {
       expect(await task).toEqual({ outputPath: input.outputPath });
     } else {
-      await expect(task).rejects.toThrow("subtitle stream diagnostic");
+      await expect(task).rejects.toThrow("命令与日志");
     }
     const report = events.findLast((event) => event.diagnostics)?.diagnostics;
     expect(report).toContain(JSON.stringify(actualCommand, null, 2));
@@ -53,6 +115,53 @@ test("启动失败时仍可回查命令", async () => {
   })).rejects.toThrow("未找到 ffmpeg");
   expect(events.at(-1)?.diagnostics).toContain("missing-ffmpeg");
   expect(events.at(-1)?.diagnostics).toContain("启动失败");
+});
+
+for (const [detail, expected] of [
+  ["Error writing trailer: No space left on device", "磁盘空间不足"],
+  ["Error opening output: Permission denied", "访问权限"],
+  ["Unexpected muxer error", "命令与日志"],
+]) {
+  test(`失败提示提炼原因，完整日志只进入诊断：${detail}`, async () => {
+    const log = `ffmpeg version 8.0\nconfiguration: --enable-many-options\n${detail}\nConversion failed!`;
+    const events: SubtitleMuxProgress[] = [];
+    let message = "";
+    try {
+      await mergeVideoWithSubtitle({ videoPath: "a.mp4", subtitlePath: "a.srt", outputPath: "a.mkv" }, {
+        existsSync: path => path !== "a.mkv",
+        onProgress: event => events.push(event),
+        spawn: (_, options) => Bun.spawn([process.execPath, "-e", `console.error(${JSON.stringify(log)}); process.exit(1);`], options),
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain(expected);
+    expect(message.length).toBeLessThan(160);
+    expect(message).not.toContain("ffmpeg version");
+    expect(message).not.toContain("configuration:");
+    expect(events.at(-1)?.message).toBe(message);
+    expect(events.at(-1)?.diagnostics).toContain(log);
+    expect(message).not.toContain("未完成文件");
+  });
+}
+
+test("有失败残留时提示处理未完成文件，保留输入及残留文件", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "duck-mux-failure-"));
+  const videoPath = join(dir, "source.mp4");
+  const subtitlePath = join(dir, "source.srt");
+  const outputPath = join(dir, "output.mkv");
+  try {
+    await writeFile(videoPath, "original video");
+    await writeFile(subtitlePath, "original subtitle");
+    await expect(mergeVideoWithSubtitle({ videoPath, subtitlePath, outputPath }, {
+      spawn: (_, options) => Bun.spawn([process.execPath, "-e", `await Bun.write(${JSON.stringify(outputPath)}, "partial output"); console.error("No space left on device"); process.exit(1);`], options),
+    })).rejects.toThrow("未完成文件");
+    expect(await readFile(videoPath, "utf8")).toBe("original video");
+    expect(await readFile(subtitlePath, "utf8")).toBe("original subtitle");
+    expect(await readFile(outputPath, "utf8")).toBe("partial output");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 

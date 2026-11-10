@@ -37,6 +37,7 @@ export function useSubtitleMerge() {
   const [muxDiagnostics, setMuxDiagnostics] = useState<string | null>(null);
 
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
+  const [mergeProgressPercent, setMergeProgressPercent] = useState<number | null>(null);
 
   const canStart = useMemo(
     () =>
@@ -97,6 +98,7 @@ export function useSubtitleMerge() {
   useEffect(() => {
     return desktopApi.onSubtitleMuxProgress((progress) => {
       setProgressMessage(progress.message);
+      setMergeProgressPercent(progress.percent ?? null);
       if (progress.diagnostics) setMuxDiagnostics(progress.diagnostics);
     });
   }, []);
@@ -105,6 +107,7 @@ export function useSubtitleMerge() {
     const nextDraft = mergeSubtitleMuxDraftWithDropPaths(draft, paths);
     setDraft(nextDraft);
     setProgressMessage(null);
+    setMergeProgressPercent(null);
     setMergeStatus(
       nextDraft.error
         ? { tone: "error", message: nextDraft.error }
@@ -124,6 +127,7 @@ export function useSubtitleMerge() {
       ]);
       setDraft(nextDraft);
       setProgressMessage(null);
+      setMergeProgressPercent(null);
       setMergeStatus(
         nextDraft.error
           ? { tone: "error", message: nextDraft.error }
@@ -168,7 +172,8 @@ export function useSubtitleMerge() {
 
     setMuxDiagnostics(null);
     setIsMerging(true);
-    setProgressMessage("准备调用 ffmpeg");
+    setProgressMessage("正在准备软合并");
+    setMergeProgressPercent(null);
     setMergeStatus({ tone: "neutral", message: "正在嵌入字幕轨道" });
     try {
       const result = await desktopApi.mergeVideoWithSubtitle({
@@ -211,6 +216,7 @@ export function useSubtitleMerge() {
     ffmpegStatus: ffmpegStatus,
     ffmpegPath: ffmpegPath,
     progressMessage: progressMessage,
+    mergeProgressPercent,
     muxDiagnostics: muxDiagnostics,
     mergeStatusTone: mergeStatus.tone,
     mergeStatusMessage: mergeStatus.message,
@@ -225,6 +231,7 @@ export function useSubtitleMerge() {
     onClear: () => {
       setDraft(EMPTY_DRAFT);
       setProgressMessage(null);
+      setMergeProgressPercent(null);
       setMergeStatus({ tone: "neutral", message: null });
     },
     onRevealOutput: () => void handleRevealOutput(),

@@ -19,6 +19,7 @@ type Props = Pick<
   | "isMerging"
   | "ffmpegStatus"
   | "progressMessage"
+  | "mergeProgressPercent"
   | "muxDiagnostics"
   | "mergeStatusTone"
   | "mergeStatusMessage"
@@ -42,6 +43,7 @@ export function SubtitleMergePanel({
   isMerging,
   ffmpegStatus,
   progressMessage,
+  mergeProgressPercent,
   muxDiagnostics,
   mergeStatusTone,
   mergeStatusMessage,
@@ -54,6 +56,8 @@ export function SubtitleMergePanel({
   onRevealOutput,
 }: Props) {
   const ffmpegUnavailable = ffmpegStatus?.available === false;
+  const percent = mergeProgressPercent !== null && Number.isFinite(mergeProgressPercent)
+    ? Math.max(0, Math.min(100, Math.floor(mergeProgressPercent))) : null;
 
   const canClearMerge = Boolean(
     videoPath ||
@@ -161,12 +165,31 @@ export function SubtitleMergePanel({
             }
           >
             {/* 完成后仅保留标题、路径和操作；进度与成功提示不再重复占行。 */}
-            {isMerging && (progressMessage || mergeStatusMessage) ? (
-              <div className="text-[length:var(--font-size-caption)] text-muted-foreground">
-                {progressMessage || mergeStatusMessage}
+            {isMerging ? (
+              <div className="grid min-w-0 gap-2 pt-1" data-subtitle-mux-progress>
+                <div role="status" className="flex min-w-0 items-start justify-between gap-3 text-[length:var(--font-size-caption)] text-muted-foreground">
+                  <span className="min-w-0 break-words">{progressMessage || mergeStatusMessage || "正在准备软合并"}</span>
+                  {percent !== null ? <span className="shrink-0 font-medium tabular-nums text-foreground">{percent}%</span> : null}
+                </div>
+                <div
+                  role="progressbar"
+                  aria-label="视频字幕软合并进度"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={percent ?? undefined}
+                  aria-valuetext={progressMessage ?? undefined}
+                  className="h-1.5 overflow-hidden rounded-full bg-[var(--control-fill)]"
+                >
+                  <div
+                    className={`subtitle-accent-progress h-full rounded-full ${percent === null ? "w-1/3 animate-pulse motion-reduce:animate-none" : "transition-[width] duration-300 motion-reduce:transition-none"}`}
+                    style={percent === null ? undefined : { width: `${percent}%` }}
+                  />
+                </div>
               </div>
             ) : mergeStatusTone === "error" && mergeStatusMessage ? (
-              <StatusMessage tone="error">{mergeStatusMessage}</StatusMessage>
+              <div role="alert">
+                <StatusMessage tone="error">{mergeStatusMessage}</StatusMessage>
+              </div>
             ) : mergeStatusTone === "neutral" && mergeStatusMessage ? (
               <div className="text-[length:var(--font-size-caption)] text-muted-foreground">
                 {mergeStatusMessage}

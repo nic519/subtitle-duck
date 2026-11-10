@@ -41,6 +41,7 @@ export type SubtitleMuxPageContentProps = {
   fasterWhisperModelHistory: string[];
   generatedSubtitlePath: string | null;
   progressMessage: string | null;
+  mergeProgressPercent: number | null;
   transcriptionProgressMessage: string | null;
   transcriptionProgressPercent: number | null;
   muxDiagnostics: string | null;
